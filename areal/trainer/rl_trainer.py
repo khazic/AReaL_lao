@@ -22,6 +22,7 @@ from areal.api import (
 )
 from areal.api.alloc_mode import ModelAllocation
 from areal.api.cli_args import (
+    DataServiceConfig,
     InferenceEngineConfig,
     PPOActorConfig,
     PPOConfig,
@@ -41,6 +42,7 @@ from areal.infra import (
     SlurmScheduler,
     current_platform,
 )
+from areal.infra.data_service import DataController, DatasetHandle
 from areal.utils import logging, perf_tracer, seeding, stats_tracker
 from areal.utils.dataloader import create_dataloader
 from areal.utils.environ import is_single_controller
@@ -111,6 +113,7 @@ class PPOTrainer:
         self.scheduler = None
         if is_single_controller():
             self.scheduler = self._init_scheduler()
+        self.data_controller: DataController | None = None
 
         # Set seed.
         seeding.set_random_seed(config.seed, key=f"trainer{rank}")
@@ -142,6 +145,7 @@ class PPOTrainer:
         # Create dataloaders
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
+        self.train_dataloader: StatefulDataLoader | DatasetHandle | _EmptyDataLoader
         if train_dataset is None:
             # Online mode: require total_train_steps to compute steps_per_epoch.
             # Without this, __len__()=1 causes every step to be treated as an
@@ -164,6 +168,29 @@ class PPOTrainer:
                 batch_size=config.train_dataset.batch_size,
                 steps_per_epoch=steps_per_epoch,
             )
+        elif (
+            self.config.train_dataset.data_service is not None
+            and is_single_controller()
+        ):
+            ds_cfg = self.config.train_dataset.data_service
+            dp_size = self._resolve_data_service_dp_size(ds_cfg)
+            controller = DataController(ds_cfg, self.scheduler)
+            controller.initialize(role="data", dp_size=dp_size)
+            self.data_controller = controller
+            self.train_dataloader = controller.register_dataset(
+                dataset_id="train",
+                dataset_path=self.config.train_dataset.path,
+                dataset_type="rl",
+                dataset_kwargs=getattr(self.config.train_dataset, "dataset_kwargs", {}),
+                tokenizer_path=self.config.tokenizer_path,
+                batch_size=self.config.train_dataset.batch_size,
+                split=getattr(self.config.train_dataset, "split", "train"),
+                seed=self.config.seed,
+                collate_mode="identity",
+                experiment_name=self.config.experiment_name,
+                trial_name=self.config.trial_name,
+                fileroot=self.config.cluster.fileroot,
+            )
         else:
             self.train_dataloader = self._create_dataloader(
                 train_dataset,
@@ -171,14 +198,35 @@ class PPOTrainer:
                 rank=self.actor.data_parallel_rank,
                 world_size=self.actor.data_parallel_world_size,
             )
-        self.valid_dataloader = None
+        self.valid_dataloader: StatefulDataLoader | DatasetHandle | None = None
         if self.config.valid_dataset is not None and valid_dataset is not None:
-            self.valid_dataloader = self._create_dataloader(
-                valid_dataset,
-                dataset_config=self.config.valid_dataset,
-                rank=self.actor.data_parallel_rank,
-                world_size=self.actor.data_parallel_world_size,
-            )
+            if (
+                self.config.train_dataset.data_service is not None
+                and is_single_controller()
+            ):
+                controller = self.data_controller
+                if controller is None:
+                    raise RuntimeError("Data controller is not initialized")
+                self.valid_dataloader = controller.register_dataset(
+                    dataset_id="valid",
+                    dataset_path=self.config.valid_dataset.path,
+                    dataset_type="rl",
+                    tokenizer_path=self.config.tokenizer_path,
+                    batch_size=self.config.valid_dataset.batch_size,
+                    split=getattr(self.config.valid_dataset, "split", "train"),
+                    seed=self.config.seed,
+                    collate_mode="identity",
+                    experiment_name=self.config.experiment_name,
+                    trial_name=self.config.trial_name,
+                    fileroot=self.config.cluster.fileroot,
+                )
+            else:
+                self.valid_dataloader = self._create_dataloader(
+                    valid_dataset,
+                    dataset_config=self.config.valid_dataset,
+                    rank=self.actor.data_parallel_rank,
+                    world_size=self.actor.data_parallel_world_size,
+                )
 
         ft_spec = FinetuneSpec(
             total_train_epochs=config.total_train_epochs,
@@ -526,6 +574,8 @@ class PPOTrainer:
                 # Since all RTensor objects are affiliated IPs,
                 # calling `clear_batches` once should be sufficient.
                 self.actor.clear_batches(rollout_batch, adv_batch)
+                if self.data_controller is not None:
+                    self.data_controller.clear_batches()
 
             with perf_tracer.trace_scope(
                 "train.log_stats",
@@ -543,6 +593,8 @@ class PPOTrainer:
 
     def close(self):
         self.saver.finalize()
+        if hasattr(self, "data_controller") and self.data_controller is not None:
+            self.data_controller.destroy()
         self.stats_logger.close()
         if self.eval_rollout is not None:
             self.eval_rollout.destroy()
@@ -905,6 +957,28 @@ class PPOTrainer:
                 "return_routed_experts is only supported with SGLang backend. "
                 "Please disable return_routed_experts or switch to SGLang backend."
             )
+
+    def _resolve_data_service_dp_size(self, ds_cfg: DataServiceConfig) -> int:
+        """Resolve data-parallel size for the data service from scheduling config.
+
+        When colocated with a target role, the number of data workers matches
+        the target role's data-parallel size.  When running on separate nodes,
+        defaults to the actor's data-parallel size.
+        """
+        sched = ds_cfg.scheduling_strategy
+        if sched.type == SchedulingStrategyType.colocation and sched.target:
+            role_allocs: dict[str, ModelAllocation] = {
+                "actor": self.actor_alloc,
+                "rollout": self.rollout_alloc,
+            }
+            alloc = role_allocs.get(sched.target)
+            if alloc is None:
+                raise ValueError(
+                    f"Unknown data service colocation target '{sched.target}'. "
+                    f"Valid targets for RL training: {sorted(role_allocs)}"
+                )
+            return alloc.parallel.dp_size
+        return self.actor_alloc.parallel.dp_size
 
     def _requires_proxy_workflow(self, workflow: WorkflowLike | None) -> bool:
         """Check if workflow requires proxy workers (i.e., not a RolloutWorkflow).

@@ -10,6 +10,8 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from areal.api import FinetuneSpec, Scheduler, StepInfo
 from areal.api.alloc_mode import ModelAllocation
 from areal.api.cli_args import (
+    DataServiceConfig,
+    SchedulingStrategyType,
     SFTConfig,
     TrainDatasetConfig,
     TrainEngineConfig,
@@ -21,6 +23,7 @@ from areal.infra import (
     SlurmScheduler,
     current_platform,
 )
+from areal.infra.data_service import DataController, DatasetHandle
 from areal.utils import logging, perf_tracer, seeding, stats_tracker
 from areal.utils.data import (
     broadcast_tensor_container,
@@ -64,6 +67,7 @@ class SFTTrainer:
         self.scheduler = None
         if is_single_controller():
             self.scheduler = self._init_scheduler()
+        self.data_controller: DataController | None = None
 
         # Set seed.
         seeding.set_random_seed(config.seed, key=f"trainer{rank}")
@@ -77,20 +81,63 @@ class SFTTrainer:
         # Create dataloaders
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
-        self.train_dataloader = self._create_dataloader(
-            train_dataset,
-            dataset_config=self.config.train_dataset,
-            rank=self.actor.data_parallel_rank,
-            world_size=self.actor.data_parallel_world_size,
-        )
-        self.valid_dataloader = None
-        if self.config.valid_dataset is not None and valid_dataset is not None:
-            self.valid_dataloader = self._create_dataloader(
-                valid_dataset,
-                dataset_config=self.config.valid_dataset,
+        self.train_dataloader: StatefulDataLoader | DatasetHandle
+        if (
+            self.config.train_dataset.data_service is not None
+            and is_single_controller()
+        ):
+            ds_cfg = self.config.train_dataset.data_service
+            dp_size = self._resolve_data_service_dp_size(ds_cfg)
+            controller = DataController(ds_cfg, self.scheduler)
+            controller.initialize(role="data", dp_size=dp_size)
+            self.data_controller = controller
+            self.train_dataloader = controller.register_dataset(
+                dataset_id="train",
+                dataset_path=self.config.train_dataset.path,
+                dataset_type="sft",
+                tokenizer_path=self.config.tokenizer_path,
+                batch_size=self.config.train_dataset.batch_size,
+                seed=self.config.seed,
+                collate_mode="tensor",
+                experiment_name=self.config.experiment_name,
+                trial_name=self.config.trial_name,
+                fileroot=self.config.cluster.fileroot,
+            )
+        else:
+            self.train_dataloader = self._create_dataloader(
+                train_dataset,
+                dataset_config=self.config.train_dataset,
                 rank=self.actor.data_parallel_rank,
                 world_size=self.actor.data_parallel_world_size,
             )
+        self.valid_dataloader: StatefulDataLoader | DatasetHandle | None = None
+        if self.config.valid_dataset is not None and valid_dataset is not None:
+            if (
+                self.config.train_dataset.data_service is not None
+                and is_single_controller()
+            ):
+                controller = self.data_controller
+                if controller is None:
+                    raise RuntimeError("Data controller is not initialized")
+                self.valid_dataloader = controller.register_dataset(
+                    dataset_id="valid",
+                    dataset_path=self.config.valid_dataset.path,
+                    dataset_type="sft",
+                    tokenizer_path=self.config.tokenizer_path,
+                    batch_size=self.config.valid_dataset.batch_size,
+                    seed=self.config.seed,
+                    collate_mode="tensor",
+                    experiment_name=self.config.experiment_name,
+                    trial_name=self.config.trial_name,
+                    fileroot=self.config.cluster.fileroot,
+                )
+            else:
+                self.valid_dataloader = self._create_dataloader(
+                    valid_dataset,
+                    dataset_config=self.config.valid_dataset,
+                    rank=self.actor.data_parallel_rank,
+                    world_size=self.actor.data_parallel_world_size,
+                )
 
         ft_spec = FinetuneSpec(
             total_train_epochs=config.total_train_epochs,
@@ -217,6 +264,8 @@ class SFTTrainer:
                 ),
             ):
                 self.actor.clear_batches(batch)
+                if self.data_controller is not None:
+                    self.data_controller.clear_batches()
 
             with perf_tracer.trace_scope(
                 "train.log_stats",
@@ -231,6 +280,8 @@ class SFTTrainer:
 
     def close(self):
         self.saver.finalize()
+        if hasattr(self, "data_controller") and self.data_controller is not None:
+            self.data_controller.destroy()
         self.stats_logger.close()
         self.actor.destroy()
         perf_tracer.save(force=True)
@@ -301,6 +352,17 @@ class SFTTrainer:
             actor = actor_cls(config=actor_config)
         actor.create_process_group(parallel_strategy=self.actor_alloc.parallel)
         return actor
+
+    def _resolve_data_service_dp_size(self, ds_cfg: DataServiceConfig) -> int:
+        sched = ds_cfg.scheduling_strategy
+        if sched.type == SchedulingStrategyType.colocation and sched.target:
+            if sched.target == "actor":
+                return self.actor_alloc.parallel.dp_size
+            raise ValueError(
+                f"Unknown data service colocation target '{sched.target}'. "
+                f"Valid targets for SFT training: ['actor']"
+            )
+        return self.actor_alloc.parallel.dp_size
 
     def _load_bcast_from(self, data_generator):
         batch = next(data_generator)

@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass
+class RouterConfig:
+    host: str = "0.0.0.0"
+    port: int = 8091
+    admin_api_key: str = "areal-data-admin"
+    routing_strategy: str = "round_robin"
+    poll_interval: float = 5.0
+    worker_health_timeout: float = 3.0

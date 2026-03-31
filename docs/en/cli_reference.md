@@ -72,6 +72,7 @@ For detailed examples, see the experiment configurations in the `examples/` dire
 
 - [ArchonEngine Configuration](section-archon-engine)
 - [ArchonFP8 Configuration](section-archon-fp8)
+- [DataService Configuration](section-data-service)
 - [DistributedDataParallel Configuration](section-distributed-data-parallel)
 - [FP8Engine Configuration](section-fp8-engine)
 - [MegatronEngine Configuration](section-megatron-engine)
@@ -628,16 +629,17 @@ https://docs.vllm.ai/en/stable/api/index.html for detailed documentation.
 
 Configuration for training dataset loading and preprocessing.
 
-| Parameter     | Type            | Default      | Description                                                                      |
-| ------------- | --------------- | ------------ | -------------------------------------------------------------------------------- |
-| `path`        | string          | **Required** | Path to the dataset. Can be a local path or a HuggingFace dataset name.          |
-| `type`        | string          | **Required** | Type of training method, e.g., 'sft', 'rl', etc.                                 |
-| `batch_size`  | integer         | `1`          | Batch size for the dataloader                                                    |
-| `shuffle`     | boolean         | `True`       | Whether to shuffle the dataset                                                   |
-| `pin_memory`  | boolean         | `False`      | Pin memory for faster data loading (set True for GPU training)                   |
-| `num_workers` | integer         | `0`          | Number of worker processes for data loading                                      |
-| `drop_last`   | boolean         | `True`       | Drop the last incomplete batch                                                   |
-| `max_length`  | integer \| None | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
+| Parameter      | Type                                                | Default      | Description                                                                      |
+| -------------- | --------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `path`         | string                                              | **Required** | Path to the dataset. Can be a local path or a HuggingFace dataset name.          |
+| `type`         | string                                              | **Required** | Type of training method, e.g., 'sft', 'rl', etc.                                 |
+| `batch_size`   | integer                                             | `1`          | Batch size for the dataloader                                                    |
+| `shuffle`      | boolean                                             | `True`       | Whether to shuffle the dataset                                                   |
+| `pin_memory`   | boolean                                             | `False`      | Pin memory for faster data loading (set True for GPU training)                   |
+| `num_workers`  | integer                                             | `0`          | Number of worker processes for data loading                                      |
+| `drop_last`    | boolean                                             | `True`       | Drop the last incomplete batch                                                   |
+| `max_length`   | integer \| None                                     | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
+| `data_service` | [`DataServiceConfig`](section-data-service) \| None | `None`       | Remote data loading service config. None uses local dataloaders.                 |
 
 (section-valid-dataset)=
 
@@ -648,16 +650,17 @@ Configuration for validation dataset loading and preprocessing.
 It has different default values with `TrainDatasetConfig`. `shuffle` and `drop_last`
 default to False.
 
-| Parameter     | Type            | Default      | Description                                                                      |
-| ------------- | --------------- | ------------ | -------------------------------------------------------------------------------- |
-| `path`        | string          | **Required** | Path to the dataset. Can be a local path or a HuggingFace dataset name.          |
-| `type`        | string          | **Required** | Type of training method, e.g., 'sft', 'rl', etc.                                 |
-| `batch_size`  | integer         | `1`          | Batch size for the dataloader                                                    |
-| `shuffle`     | boolean         | `False`      | Whether to shuffle the dataset                                                   |
-| `pin_memory`  | boolean         | `False`      | Pin memory for faster data loading (set True for GPU training)                   |
-| `num_workers` | integer         | `0`          | Number of worker processes for data loading                                      |
-| `drop_last`   | boolean         | `False`      | Drop the last incomplete batch                                                   |
-| `max_length`  | integer \| None | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
+| Parameter      | Type                                                | Default      | Description                                                                      |
+| -------------- | --------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `path`         | string                                              | **Required** | Path to the dataset. Can be a local path or a HuggingFace dataset name.          |
+| `type`         | string                                              | **Required** | Type of training method, e.g., 'sft', 'rl', etc.                                 |
+| `batch_size`   | integer                                             | `1`          | Batch size for the dataloader                                                    |
+| `shuffle`      | boolean                                             | `False`      | Whether to shuffle the dataset                                                   |
+| `pin_memory`   | boolean                                             | `False`      | Pin memory for faster data loading (set True for GPU training)                   |
+| `num_workers`  | integer                                             | `0`          | Number of worker processes for data loading                                      |
+| `drop_last`    | boolean                                             | `False`      | Drop the last incomplete batch                                                   |
+| `max_length`   | integer \| None                                     | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
+| `data_service` | [`DataServiceConfig`](section-data-service) \| None | `None`       | Remote data loading service config. None uses local dataloaders.                 |
 
 (section-cluster)=
 
@@ -834,6 +837,25 @@ Archon FP8 training configuration.
 | `exclude_modules` | list of string | **Required** | FQN substrings of nn.Linear modules to keep in BF16 (not converted to FP8). Any module whose fully-qualified name contains one of these strings is skipped. Meaningful values for Archon models: 'output' (LM head, logit precision sensitive), 'router' (MoE router gate, routing stability sensitive), 'score' (critic head, value precision sensitive). Note: nn.Embedding modules (e.g. tok_embeddings) are never converted regardless of this list. WARNING: Setting this in YAML replaces the entire default list (does not extend it). Include ALL modules you want to keep in BF16. |
 | `include_experts` | boolean        | `False`      | Apply FP8 to MoE expert computation. Uses per-expert blockwise FP8 matmuls via torchao.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `use_triton`      | boolean        | `True`       | Use Triton GEMM kernel for FP8 blockwise matmuls instead of cuBLAS. Currently must be True: torchao's blockwise FP8 is a prototype that uses mixed per-operand scaling (1x128 activations + 128x128 weights), which torch.\_scaled_mm does not support. The Triton kernel (triton_fp8_gemm_1x128_128x128) handles this natively. Revisit when torchao stabilizes mixed-mode cuBLAS dispatch.                                                                                                                                                                                                |
+
+(section-data-service)=
+
+## DataService Configuration
+
+Remote data loading service configuration.
+
+When set on a `_DatasetConfig`, the trainer offloads dataset loading to a distributed
+data service instead of creating local dataloaders. The service is converted internally
+into the controller config.
+
+| Parameter             | Type                                                | Default         | Description                                                                                                                                                                                     |
+| --------------------- | --------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker_cpu`          | integer                                             | `4`             | CPU cores per data worker.                                                                                                                                                                      |
+| `worker_mem`          | integer                                             | `16`            | Memory (GB) per data worker.                                                                                                                                                                    |
+| `prefetch_batches`    | integer                                             | `2`             | Prefetch buffer capacity per dataset.                                                                                                                                                           |
+| `setup_timeout`       | float                                               | `120.0`         | Timeout for service startup.                                                                                                                                                                    |
+| `routing_strategy`    | string                                              | `"round_robin"` | Worker routing strategy.                                                                                                                                                                        |
+| `scheduling_strategy` | [`SchedulingStrategy`](section-scheduling-strategy) | **Required**    | Scheduling strategy for data service workers. Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share nodes with that role. Default is 'separation' (dedicated CPU-only nodes). |
 
 (section-distributed-data-parallel)=
 

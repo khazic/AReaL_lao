@@ -2160,6 +2160,38 @@ class SchedulerConfig:
 
 
 @dataclass
+class DataServiceConfig:
+    """Remote data loading service configuration.
+
+    When set on a ``_DatasetConfig``, the trainer offloads dataset loading
+    to a distributed data service instead of creating local dataloaders.
+    The service is converted internally into the controller config.
+    """
+
+    worker_cpu: int = field(default=4, metadata={"help": "CPU cores per data worker."})
+    worker_mem: int = field(
+        default=16, metadata={"help": "Memory (GB) per data worker."}
+    )
+    prefetch_batches: int = field(
+        default=2, metadata={"help": "Prefetch buffer capacity per dataset."}
+    )
+    setup_timeout: float = field(
+        default=120.0, metadata={"help": "Timeout for service startup."}
+    )
+    routing_strategy: str = field(
+        default="round_robin", metadata={"help": "Worker routing strategy."}
+    )
+    scheduling_strategy: SchedulingStrategy = field(
+        default_factory=SchedulingStrategy,
+        metadata={
+            "help": "Scheduling strategy for data service workers. "
+            "Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share "
+            "nodes with that role. Default is 'separation' (dedicated CPU-only nodes)."
+        },
+    )
+
+
+@dataclass
 class _DatasetConfig:
     """Configuration for dataset loading and preprocessing."""
 
@@ -2195,6 +2227,12 @@ class _DatasetConfig:
         default=None,
         metadata={
             "help": "Maximum token length of sequences in dataset. Longer sequences are filtered out."
+        },
+    )
+    data_service: DataServiceConfig | None = field(
+        default=None,
+        metadata={
+            "help": "Remote data loading service config. None uses local dataloaders."
         },
     )
 
