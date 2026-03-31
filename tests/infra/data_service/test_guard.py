@@ -233,7 +233,10 @@ class TestForkRawCommand:
         assert data["pid"] == 55
 
         cmd = mock_run.call_args[0][0]
-        assert cmd == raw
+        assert cmd[: len(raw)] == raw
+        assert "--host" in cmd
+        assert "--port" in cmd
+        assert "8001" in cmd
         assert "--experiment-name" not in cmd
         assert "--role" not in cmd
 

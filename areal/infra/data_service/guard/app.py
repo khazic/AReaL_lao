@@ -132,9 +132,8 @@ def fork_worker():
         scheduler args injected. Waits for health readiness before returning.
 
     **Raw-command mode** (``raw_cmd`` field):
-        Launches the provided command list as-is. A port is allocated but NOT
-        injected into the command (caller provides port in ``raw_cmd``).
-        Returns immediately after spawn without readiness polling.
+        Launches the provided command list with ``--host`` and ``--port``
+        appended.  Returns immediately after spawn without readiness polling.
 
     Expected JSON payload (module-path mode):
     {
@@ -196,8 +195,8 @@ def fork_worker():
         is_raw_mode = raw_cmd is not None
 
         if is_raw_mode:
-            # Raw-command mode: use command as-is, do NOT inject port or args
-            cmd = list(raw_cmd)
+            # Raw-command mode: inject --host and --port into the command
+            cmd = list(raw_cmd) + ["--host", _server_host, "--port", str(child_port)]
         else:
             # Module-path mode: build command with scheduler args
             cmd = [

@@ -374,35 +374,28 @@ class DataController:
         raw_cmd: list[str],
         health_path: str = "/health",
     ) -> tuple[str, int]:
-        """Fork a process on a RPCGuard worker via ``/fork`` with ``raw_cmd``.
+        """Fork a process on a RPCGuard worker via ``/fork``.
 
-        Returns ``(host, port)`` of the forked service and records the entry
-        in ``_forked_services`` for cleanup.
+        Uses the guard's ``/fork`` endpoint which allocates a port internally,
+        spawns the subprocess with ``--host`` and ``--port`` injected, and
+        returns the actual ``(host, port)`` of the child.
         """
         import requests
-
-        resp = requests.post(
-            f"{guard_addr}/alloc_ports",
-            json={"count": 1},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        port_data = resp.json()
-        host = port_data["host"]
-        port = port_data["ports"][0]
-
-        cmd = list(raw_cmd) + ["--host", host, "--port", str(port)]
 
         resp = requests.post(
             f"{guard_addr}/fork",
             json={
                 "role": role,
                 "worker_index": worker_index,
-                "raw_cmd": cmd,
+                "command": None,
+                "raw_cmd": list(raw_cmd),
             },
             timeout=30,
         )
         resp.raise_for_status()
+        fork_data = resp.json()
+        host = fork_data["host"]
+        port = fork_data["port"]
 
         self._forked_services.append((guard_addr, role, worker_index))
 
