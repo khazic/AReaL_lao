@@ -637,7 +637,7 @@ Configuration for training dataset loading and preprocessing.
 | `num_workers`  | integer                                             | `0`          | Number of worker processes for data loading                                      |
 | `drop_last`    | boolean                                             | `True`       | Drop the last incomplete batch                                                   |
 | `max_length`   | integer \| None                                     | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
-| `data_service` | [`DataServiceConfig`](section-data-service) \| None | `None`       | Remote data loading service config. None uses local dataloaders.                 |
+| `data_service` | [`DataServiceConfig`](section-data-service) \| None | **Required** | Remote data loading service config. None disables and uses local dataloaders.    |
 
 (section-valid-dataset)=
 
@@ -658,7 +658,7 @@ default to False.
 | `num_workers`  | integer                                             | `0`          | Number of worker processes for data loading                                      |
 | `drop_last`    | boolean                                             | `False`      | Drop the last incomplete batch                                                   |
 | `max_length`   | integer \| None                                     | `None`       | Maximum token length of sequences in dataset. Longer sequences are filtered out. |
-| `data_service` | [`DataServiceConfig`](section-data-service) \| None | `None`       | Remote data loading service config. None uses local dataloaders.                 |
+| `data_service` | [`DataServiceConfig`](section-data-service) \| None | **Required** | Remote data loading service config. None disables and uses local dataloaders.    |
 
 (section-cluster)=
 
@@ -846,14 +846,14 @@ When set on a `_DatasetConfig`, the trainer offloads dataset loading to a distri
 data service instead of creating local dataloaders. The service is converted internally
 into the controller config.
 
-| Parameter             | Type                                                | Default         | Description                                                                                                                                                                                     |
-| --------------------- | --------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `worker_cpu`          | integer                                             | `4`             | CPU cores per data worker.                                                                                                                                                                      |
-| `worker_mem`          | integer                                             | `16`            | Memory (GB) per data worker.                                                                                                                                                                    |
-| `prefetch_batches`    | integer                                             | `2`             | Prefetch buffer capacity per dataset.                                                                                                                                                           |
-| `setup_timeout`       | float                                               | `120.0`         | Timeout for service startup.                                                                                                                                                                    |
-| `routing_strategy`    | string                                              | `"round_robin"` | Worker routing strategy.                                                                                                                                                                        |
-| `scheduling_strategy` | [`SchedulingStrategy`](section-scheduling-strategy) | **Required**    | Scheduling strategy for data service workers. Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share nodes with that role. Default is 'separation' (dedicated CPU-only nodes). |
+| Parameter             | Type                                                | Default         | Description                                                                                                                                                                     |
+| --------------------- | --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker_cpu`          | integer                                             | `4`             | CPU cores per data worker.                                                                                                                                                      |
+| `worker_mem`          | integer                                             | `16`            | Memory (GB) per data worker.                                                                                                                                                    |
+| `prefetch_batches`    | integer                                             | `2`             | Prefetch buffer capacity per dataset.                                                                                                                                           |
+| `setup_timeout`       | float                                               | `120.0`         | Timeout for service startup.                                                                                                                                                    |
+| `routing_strategy`    | string                                              | `"round_robin"` | Worker routing strategy.                                                                                                                                                        |
+| `scheduling_strategy` | [`SchedulingStrategy`](section-scheduling-strategy) | **Required**    | Scheduling strategy for data service workers. Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share nodes with that role. Default is colocation with 'actor'. |
 
 (section-distributed-data-parallel)=
 

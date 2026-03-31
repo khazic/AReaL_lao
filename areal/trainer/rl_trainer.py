@@ -145,12 +145,12 @@ class PPOTrainer:
         # Create dataloaders
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
-        self.train_dataloader: StatefulDataLoader | DatasetHandle | _EmptyDataLoader
+
+        # Compute ft_spec before engine initialization.
+        # For data-service / online modes, use raw dataset length;
+        # for local dataloader mode, use the dataloader length after creation.
         if train_dataset is None:
-            # Online mode: require total_train_steps to compute steps_per_epoch.
-            # Without this, __len__()=1 causes every step to be treated as an
-            # epoch boundary, making Saver/RecoverHandler fire every step and
-            # corrupting the LR schedule.
+            # Online mode
             if config.total_train_steps is None:
                 raise ValueError(
                     "total_train_steps must be set for online mode "
@@ -164,76 +164,18 @@ class PPOTrainer:
                     f"total_train_epochs ({config.total_train_epochs}) so that "
                     f"steps_per_epoch >= 1."
                 )
-            self.train_dataloader = _EmptyDataLoader(
-                batch_size=config.train_dataset.batch_size,
-                steps_per_epoch=steps_per_epoch,
-            )
-        elif (
-            self.config.train_dataset.data_service is not None
-            and is_single_controller()
-        ):
-            ds_cfg = self.config.train_dataset.data_service
-            dp_size = self._resolve_data_service_dp_size(ds_cfg)
-            controller = DataController(ds_cfg, self.scheduler)
-            controller.initialize(role="data", dp_size=dp_size)
-            self.data_controller = controller
-            self.train_dataloader = controller.register_dataset(
-                dataset_id="train",
-                dataset_path=self.config.train_dataset.path,
-                dataset_type="rl",
-                dataset_kwargs=getattr(self.config.train_dataset, "dataset_kwargs", {}),
-                tokenizer_path=self.config.tokenizer_path,
-                batch_size=self.config.train_dataset.batch_size,
-                split=getattr(self.config.train_dataset, "split", "train"),
-                seed=self.config.seed,
-                collate_mode="identity",
-                experiment_name=self.config.experiment_name,
-                trial_name=self.config.trial_name,
-                fileroot=self.config.cluster.fileroot,
-            )
+            dataset_size = steps_per_epoch * config.train_dataset.batch_size
         else:
-            self.train_dataloader = self._create_dataloader(
-                train_dataset,
-                dataset_config=self.config.train_dataset,
-                rank=self.actor.data_parallel_rank,
-                world_size=self.actor.data_parallel_world_size,
-            )
-        self.valid_dataloader: StatefulDataLoader | DatasetHandle | None = None
-        if self.config.valid_dataset is not None and valid_dataset is not None:
-            if (
-                self.config.train_dataset.data_service is not None
-                and is_single_controller()
-            ):
-                controller = self.data_controller
-                if controller is None:
-                    raise RuntimeError("Data controller is not initialized")
-                self.valid_dataloader = controller.register_dataset(
-                    dataset_id="valid",
-                    dataset_path=self.config.valid_dataset.path,
-                    dataset_type="rl",
-                    tokenizer_path=self.config.tokenizer_path,
-                    batch_size=self.config.valid_dataset.batch_size,
-                    split=getattr(self.config.valid_dataset, "split", "train"),
-                    seed=self.config.seed,
-                    collate_mode="identity",
-                    experiment_name=self.config.experiment_name,
-                    trial_name=self.config.trial_name,
-                    fileroot=self.config.cluster.fileroot,
-                )
-            else:
-                self.valid_dataloader = self._create_dataloader(
-                    valid_dataset,
-                    dataset_config=self.config.valid_dataset,
-                    rank=self.actor.data_parallel_rank,
-                    world_size=self.actor.data_parallel_world_size,
-                )
+            dataset_size = len(train_dataset)
 
         ft_spec = FinetuneSpec(
             total_train_epochs=config.total_train_epochs,
-            dataset_size=len(self.train_dataloader) * config.train_dataset.batch_size,
+            dataset_size=dataset_size,
             train_batch_size=config.train_dataset.batch_size,
         )
 
+        # Initialize engines first — the scheduler must know about roles
+        # before the data controller can colocate with them.
         engine_init_kwargs = {"addr": None, "ft_spec": ft_spec}
         self.actor.initialize(**engine_init_kwargs, role="actor")
         if self.critic is not None:
@@ -267,6 +209,73 @@ class PPOTrainer:
             self.eval_rollout = self._init_rollout(
                 config.rollout, is_eval=True, lora_path=initial_lora_path
             )
+
+        # Create dataloaders (data service requires target roles to be initialized)
+        self.train_dataloader: StatefulDataLoader | DatasetHandle | _EmptyDataLoader
+        if train_dataset is None:
+            self.train_dataloader = _EmptyDataLoader(
+                batch_size=config.train_dataset.batch_size,
+                steps_per_epoch=steps_per_epoch,
+            )
+        elif (
+            self.config.train_dataset.data_service is not None
+            and is_single_controller()
+        ):
+            ds_cfg = self.config.train_dataset.data_service
+            dp_size = self._resolve_data_service_dp_size(ds_cfg)
+            controller = DataController(ds_cfg, self.scheduler)
+            controller.initialize(role="data", dp_size=dp_size)
+            self.data_controller = controller
+            self.train_dataloader = controller.register_dataset(
+                dataset_id="train",
+                dataset_path=self.config.train_dataset.path,
+                dataset_type="rl",
+                dataset_kwargs=getattr(self.config.train_dataset, "dataset_kwargs", {}),
+                tokenizer_or_processor_path=self.config.tokenizer_path,
+                batch_size=self.config.train_dataset.batch_size,
+                split=getattr(self.config.train_dataset, "split", "train"),
+                seed=self.config.seed,
+                collate_mode="identity",
+                experiment_name=self.config.experiment_name,
+                trial_name=self.config.trial_name,
+                fileroot=self.config.cluster.fileroot,
+            )
+        else:
+            self.train_dataloader = self._create_dataloader(
+                train_dataset,
+                dataset_config=self.config.train_dataset,
+                rank=self.actor.data_parallel_rank,
+                world_size=self.actor.data_parallel_world_size,
+            )
+        self.valid_dataloader: StatefulDataLoader | DatasetHandle | None = None
+        if self.config.valid_dataset is not None and valid_dataset is not None:
+            if (
+                self.config.train_dataset.data_service is not None
+                and is_single_controller()
+            ):
+                controller = self.data_controller
+                if controller is None:
+                    raise RuntimeError("Data controller is not initialized")
+                self.valid_dataloader = controller.register_dataset(
+                    dataset_id="valid",
+                    dataset_path=self.config.valid_dataset.path,
+                    dataset_type="rl",
+                    tokenizer_or_processor_path=self.config.tokenizer_path,
+                    batch_size=self.config.valid_dataset.batch_size,
+                    split=getattr(self.config.valid_dataset, "split", "train"),
+                    seed=self.config.seed,
+                    collate_mode="identity",
+                    experiment_name=self.config.experiment_name,
+                    trial_name=self.config.trial_name,
+                    fileroot=self.config.cluster.fileroot,
+                )
+            else:
+                self.valid_dataloader = self._create_dataloader(
+                    valid_dataset,
+                    dataset_config=self.config.valid_dataset,
+                    rank=self.actor.data_parallel_rank,
+                    world_size=self.actor.data_parallel_world_size,
+                )
 
         # Proxy worker initialization (lazy, for AgentWorkflow support)
         self._proxy_started = False

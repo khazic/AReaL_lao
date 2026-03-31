@@ -53,8 +53,8 @@ class TestDataServiceConfig:
         assert cfg.setup_timeout == 120.0
         assert cfg.routing_strategy == "round_robin"
         assert isinstance(cfg.scheduling_strategy, SchedulingStrategy)
-        assert cfg.scheduling_strategy.type == "separation"
-        assert cfg.scheduling_strategy.target is None
+        assert cfg.scheduling_strategy.type == SchedulingStrategyType.colocation
+        assert cfg.scheduling_strategy.target == "actor"
 
     def test_custom_values(self):
         cfg = DataServiceConfig(
@@ -95,23 +95,24 @@ class TestDataServiceConfig:
 
         cfg = TrainDatasetConfig(path="dummy", type="rl")
         assert hasattr(cfg, "data_service")
-        assert cfg.data_service is None
+        assert isinstance(cfg.data_service, DataServiceConfig)
 
     def test_config_in_ppo_config(self):
         cfg = PPOConfig(experiment_name="exp", trial_name="trial")
         assert hasattr(cfg.train_dataset, "data_service")
-        assert cfg.train_dataset.data_service is None
+        assert isinstance(cfg.train_dataset.data_service, DataServiceConfig)
 
     def test_config_in_sft_config(self):
         cfg = SFTConfig(experiment_name="exp", trial_name="trial")
         assert hasattr(cfg.train_dataset, "data_service")
-        assert cfg.train_dataset.data_service is None
+        assert isinstance(cfg.train_dataset.data_service, DataServiceConfig)
 
     def test_config_in_rw_config(self):
         from areal.api.cli_args import TrainDatasetConfig
 
         assert "data_service" in TrainDatasetConfig.__dataclass_fields__
-        assert TrainDatasetConfig.__dataclass_fields__["data_service"].default is None
+        cfg = TrainDatasetConfig(path="dummy", type="rl")
+        assert isinstance(cfg.data_service, DataServiceConfig)
 
 
 class TestDataControllerInit:

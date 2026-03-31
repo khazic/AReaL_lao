@@ -86,22 +86,28 @@ class TestCycleDataloaderCompat:
         assert dataloader.sampler.epochs == [0, 1]
 
 
-class TestDataServiceConfigDefaultNone:
-    def test_ppo_config_data_service_none_by_default(self):
+class TestDataServiceConfigDefault:
+    def test_ppo_config_data_service_enabled_by_default(self):
         cfg = PPOConfig(experiment_name="exp", trial_name="trial")
-        assert cfg.train_dataset.data_service is None
+        assert isinstance(cfg.train_dataset.data_service, DataServiceConfig)
 
-    def test_sft_config_data_service_none_by_default(self):
+    def test_sft_config_data_service_enabled_by_default(self):
         cfg = SFTConfig(experiment_name="exp", trial_name="trial")
-        assert cfg.train_dataset.data_service is None
+        assert isinstance(cfg.train_dataset.data_service, DataServiceConfig)
 
-    def test_rw_config_data_service_none_by_default(self):
+    def test_rw_config_data_service_enabled_by_default(self):
         cfg = RWConfig(
             experiment_name="exp",
             trial_name="trial",
             actor=TrainEngineConfig(is_critic=True),
         )
-        assert cfg.train_dataset.data_service is None
+        assert isinstance(cfg.train_dataset.data_service, DataServiceConfig)
+
+    def test_data_service_can_be_disabled(self):
+        from areal.api.cli_args import TrainDatasetConfig
+
+        ds_cfg = TrainDatasetConfig(path="dummy", type="rl", data_service=None)
+        assert ds_cfg.data_service is None
 
     def test_ppo_config_with_data_service(self):
         from areal.api.cli_args import TrainDatasetConfig
@@ -140,8 +146,8 @@ class TestDataServiceConfigDefaultNone:
         ds_cfg = DataServiceConfig()
 
         assert isinstance(ds_cfg.scheduling_strategy, SchedulingStrategy)
-        assert ds_cfg.scheduling_strategy.type == "separation"
-        assert ds_cfg.scheduling_strategy.target is None
+        assert ds_cfg.scheduling_strategy.type == SchedulingStrategyType.colocation
+        assert ds_cfg.scheduling_strategy.target == "actor"
 
     def test_config_data_service_scheduling_strategy_colocation(self):
         from areal.api.cli_args import TrainDatasetConfig

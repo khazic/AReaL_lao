@@ -2182,11 +2182,13 @@ class DataServiceConfig:
         default="round_robin", metadata={"help": "Worker routing strategy."}
     )
     scheduling_strategy: SchedulingStrategy = field(
-        default_factory=SchedulingStrategy,
+        default_factory=lambda: SchedulingStrategy(
+            type=SchedulingStrategyType.colocation, target="actor"
+        ),
         metadata={
             "help": "Scheduling strategy for data service workers. "
             "Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share "
-            "nodes with that role. Default is 'separation' (dedicated CPU-only nodes)."
+            "nodes with that role. Default is colocation with 'actor'."
         },
     )
 
@@ -2230,9 +2232,9 @@ class _DatasetConfig:
         },
     )
     data_service: DataServiceConfig | None = field(
-        default=None,
+        default_factory=DataServiceConfig,
         metadata={
-            "help": "Remote data loading service config. None uses local dataloaders."
+            "help": "Remote data loading service config. None disables and uses local dataloaders."
         },
     )
 

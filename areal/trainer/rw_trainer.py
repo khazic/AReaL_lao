@@ -100,9 +100,21 @@ class RWTrainer:
         # Create models.
         self.actor = self._create_actor(config.actor)
 
-        # Create dataloaders
+        # Compute ft_spec from raw dataset (before data service setup, which
+        # requires actor to be initialized first for colocation scheduling).
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
+        ft_spec = FinetuneSpec(
+            total_train_epochs=config.total_train_epochs,
+            dataset_size=len(train_dataset),
+            train_batch_size=config.train_dataset.batch_size,
+        )
+
+        # Initialize actor first — the scheduler must know about the "actor"
+        # role before the data controller can colocate with it.
+        self.actor.initialize(addr=None, ft_spec=ft_spec, role="actor")
+
+        # Create dataloaders (data service path requires actor to be initialized)
         self.train_dataloader: StatefulDataLoader | DatasetHandle
         if (
             self.config.train_dataset.data_service is not None
@@ -117,7 +129,7 @@ class RWTrainer:
                 dataset_id="train",
                 dataset_path=self.config.train_dataset.path,
                 dataset_type="rw",
-                tokenizer_path=self.config.tokenizer_path,
+                tokenizer_or_processor_path=self.config.tokenizer_path,
                 batch_size=self.config.train_dataset.batch_size,
                 seed=self.config.seed,
                 collate_mode="tensor",
@@ -145,7 +157,7 @@ class RWTrainer:
                     dataset_id="valid",
                     dataset_path=self.config.valid_dataset.path,
                     dataset_type="rw",
-                    tokenizer_path=self.config.tokenizer_path,
+                    tokenizer_or_processor_path=self.config.tokenizer_path,
                     batch_size=self.config.valid_dataset.batch_size,
                     seed=self.config.seed,
                     collate_mode="tensor",
@@ -160,15 +172,6 @@ class RWTrainer:
                     rank=self.actor.data_parallel_rank,
                     world_size=self.actor.data_parallel_world_size,
                 )
-
-        ft_spec = FinetuneSpec(
-            total_train_epochs=config.total_train_epochs,
-            dataset_size=len(self.train_dataloader) * config.train_dataset.batch_size,
-            train_batch_size=config.train_dataset.batch_size,
-        )
-
-        # Initialize models
-        self.actor.initialize(addr=None, ft_spec=ft_spec, role="actor")
 
         # Set up evaluation
         self.evaluator = Evaluator(config.evaluator, ft_spec)
