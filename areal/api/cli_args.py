@@ -2182,9 +2182,7 @@ class DataServiceConfig:
         default="round_robin", metadata={"help": "Worker routing strategy."}
     )
     scheduling_strategy: SchedulingStrategy = field(
-        default_factory=lambda: SchedulingStrategy(
-            type=SchedulingStrategyType.colocation, target="actor"
-        ),
+        default_factory=lambda: SchedulingStrategy(type="colocation", target="actor"),
         metadata={
             "help": "Scheduling strategy for data service workers. "
             "Use 'colocation' with a target role (e.g., 'rollout', 'actor') to share "
