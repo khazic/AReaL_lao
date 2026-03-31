@@ -21,6 +21,7 @@ from areal.api.cli_args import PerfTracerConfig, TrainEngineConfig
 from areal.infra.rpc.rtensor import RTensor
 from areal.infra.utils.concurrent import run_async_task
 from areal.utils import logging, stats_tracker
+from areal.utils.data import make_dummy_eval_item
 from areal.utils.network import find_free_ports
 from areal.utils.seqpack import balanced_greedy_partition
 
@@ -81,6 +82,32 @@ def _dispatch_tensors(
     group_indices = balanced_greedy_partition(token_weights, K=dp_size)
     splits = [[item_list[i] for i in idxs] for idxs in group_indices]
     return splits, group_indices
+
+
+def _pad_eval_batch(args: tuple[Any, ...], dp_size: int) -> tuple[Any, ...]:
+    """Pad the first tensor-like arg to a multiple of dp_size with dummy items.
+
+    Called before dispatch for ``evaluate_*`` methods so that
+    ``balanced_greedy_partition`` always receives a divisible input.
+    Dummy items have zero attention/loss masks and contribute nothing
+    to metrics or loss.
+    """
+    result = list(args)
+    for i, arg in enumerate(result):
+        if isinstance(arg, list) and arg and _is_tensor_like(arg):
+            n = len(arg)
+            pad_count = (-n) % dp_size
+            if pad_count > 0:
+                padded = list(arg)
+                template = arg[0]
+                padded.extend(make_dummy_eval_item(template) for _ in range(pad_count))
+                result[i] = padded
+                logger.info(
+                    f"Eval dispatch: padded {pad_count} dummy items "
+                    f"(total {len(padded)}) for dp_size={dp_size}"
+                )
+            break  # only pad the first tensor-like arg
+    return tuple(result)
 
 
 def _merge_tensors(
@@ -378,12 +405,16 @@ class TrainController:
 
     def _custom_function_call(self, method: str, *args, **kwargs):
         """Dispatch method call to workers via the appropriate path."""
+        if method.startswith("evaluate_"):
+            args = _pad_eval_batch(args, self.parallel_strategy.dp_size)
         dp_args, dp_kwargs, group_indices = self._prepare_dispatch(*args, **kwargs)
         results = run_async_task(self._call_workers, method, dp_args, dp_kwargs)
         return self._collect_results(results, group_indices)
 
     async def _async_custom_function_call(self, method: str, *args, **kwargs):
         """Async version of _custom_function_call."""
+        if method.startswith("evaluate_"):
+            args = _pad_eval_batch(args, self.parallel_strategy.dp_size)
         dp_args, dp_kwargs, group_indices = self._prepare_dispatch(*args, **kwargs)
         results = await self._call_workers(method, dp_args, dp_kwargs)
         return self._collect_results(results, group_indices)
