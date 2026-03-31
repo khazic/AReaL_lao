@@ -12,7 +12,7 @@ from areal.api.cli_args import NameResolveConfig
 from areal.experimental.inference_service.guard import app as guard_app
 from areal.experimental.inference_service.guard.app import app as flask_app
 from areal.utils import logging, name_resolve, names
-from areal.utils.network import gethostip
+from areal.utils.network import format_hostport, gethostip
 
 logger = logging.getLogger("RPCGuard")
 
@@ -84,11 +84,10 @@ def main():
     key = names.worker_discovery(
         args.experiment_name, args.trial_name, args.role, worker_index
     )
-    name_resolve.add(key, f"{guard_app._server_host}:{server_port}", replace=True)
+    server_addr = format_hostport(guard_app._server_host, server_port)
+    name_resolve.add(key, server_addr, replace=True)
 
-    logger.info(
-        f"Starting RPCGuard on {guard_app._server_host}:{server_port} for worker {worker_id}"
-    )
+    logger.info(f"Starting RPCGuard on {server_addr} for worker {worker_id}")
 
     def _sigterm_handler(signum, frame):
         """Convert SIGTERM to SystemExit so the finally block runs."""

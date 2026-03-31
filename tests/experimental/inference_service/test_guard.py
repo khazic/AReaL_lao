@@ -76,6 +76,17 @@ class TestHealth:
         assert data["forked_children"] == 3
 
 
+class TestWorkerReadiness:
+    @patch("areal.experimental.inference_service.guard.app.http_requests.get")
+    def test_wait_for_worker_ready_brackets_ipv6_host(self, mock_get):
+        mock_get.return_value.status_code = 200
+
+        ready = guard_module._wait_for_worker_ready("2001:db8::1", 8001, timeout=1)
+
+        assert ready is True
+        mock_get.assert_called_once_with("http://[2001:db8::1]:8001/health", timeout=2)
+
+
 # =============================================================================
 # TestAllocPorts
 # =============================================================================

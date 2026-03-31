@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request
 
 from areal.infra.utils.proc import kill_process_tree, run_with_streaming_logs
 from areal.utils import logging
-from areal.utils.network import find_free_ports
+from areal.utils.network import find_free_ports, format_hostport
 
 logger = logging.getLogger("RPCGuard")
 
@@ -106,7 +106,7 @@ def _wait_for_worker_ready(host: str, port: int, timeout: float = 60) -> bool:
     Returns:
         True if the worker is ready, False if timeout is reached.
     """
-    url = f"http://{host}:{port}/health"
+    url = f"http://{format_hostport(host, port)}/health"
     deadline = time.time() + timeout
 
     while time.time() < deadline:
@@ -277,7 +277,7 @@ def fork_worker():
 
             logger.info(
                 f"Forked worker for role '{role}' index {worker_index} ready at "
-                f"{child_host}:{child_port} (pid={child_process.pid})"
+                f"{format_hostport(child_host, child_port)} (pid={child_process.pid})"
             )
         else:
             # Raw-command mode: return immediately without readiness polling
