@@ -71,12 +71,14 @@ async def loaded_client(config: DataWorkerConfig):
         patch(
             "areal.infra.data_service.worker.app.split_dataset_by_node"
         ) as mock_split,
-        patch("areal.infra.data_service.worker.app.load_hf_tokenizer") as mock_tok,
+        patch(
+            "areal.infra.data_service.worker.app.load_hf_processor_and_tokenizer"
+        ) as mock_load,
     ):
         ds = _make_mock_dataset(20)
         mock_get.return_value = ds
         mock_split.return_value = ds
-        mock_tok.return_value = None
+        mock_load.return_value = (None, None)
 
         app = create_worker_app(config)
         transport = httpx.ASGITransport(app=app)

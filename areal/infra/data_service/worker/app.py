@@ -29,7 +29,7 @@ from areal.infra.data_service.worker.tensor_store import TensorStore
 from areal.infra.rpc.serialization import serialize_value
 from areal.utils import logging, seeding
 from areal.utils.data import collate_samples_to_list
-from areal.utils.hf_utils import load_hf_tokenizer
+from areal.utils.hf_utils import load_hf_processor_and_tokenizer
 
 logger = logging.getLogger("DataWorker")
 
@@ -104,14 +104,11 @@ def create_worker_app(config: DataWorkerConfig) -> FastAPI:
             )
 
         tokenizer = None
-        if body.tokenizer_path:
-            tokenizer = load_hf_tokenizer(body.tokenizer_path)
-
         processor = None
-        if body.processor_path:
-            from areal.utils.hf_utils import load_hf_processor_and_tokenizer
-
-            processor, tokenizer = load_hf_processor_and_tokenizer(body.processor_path)
+        if body.tokenizer_or_processor_path:
+            processor, tokenizer = load_hf_processor_and_tokenizer(
+                body.tokenizer_or_processor_path
+            )
 
         seeding.set_random_seed(body.seed, key=f"data_worker_{config.rank}")
 
@@ -122,6 +119,13 @@ def create_worker_app(config: DataWorkerConfig) -> FastAPI:
             type=body.dataset_type,
             batch_size=body.batch_size,
             max_length=body.max_length,
+        )
+        dataset = get_custom_dataset(
+            split=body.split,
+            dataset_config=dataset_config,
+            tokenizer=tokenizer,
+            processor=processor,
+            **body.dataset_kwargs,
         )
         dataset = get_custom_dataset(
             split=body.split,

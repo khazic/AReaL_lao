@@ -76,8 +76,7 @@ def _register_dataset(
     dataset_id: str,
     dataset_path: str,
     dataset_type: str = "rl",
-    tokenizer_path: str = "",
-    processor_path: str = "",
+    tokenizer_or_processor_path: str = "",
     batch_size: int = BATCH_SIZE,
 ) -> dict[str, Any]:
     resp = client.post(
@@ -92,8 +91,7 @@ def _register_dataset(
             "seed": 42,
             "collate_mode": "identity",
             "shuffle": False,
-            "tokenizer_path": tokenizer_path,
-            "processor_path": processor_path,
+            "tokenizer_or_processor_path": tokenizer_or_processor_path,
         },
         timeout=120.0,
     )
@@ -264,7 +262,7 @@ class TestDatasetRegistration:
             dataset_id=_unique_dataset_id("register-sft"),
             dataset_path=str(data_service_stack["dataset_path"]),
             dataset_type="sft",
-            tokenizer_path=str(data_service_stack["model_path"]),
+            tokenizer_or_processor_path=str(data_service_stack["model_path"]),
         )
         assert str(payload["api_key"]).startswith("ds-")
         assert payload["dataset_size"] > 0
@@ -289,7 +287,7 @@ class TestDatasetRegistration:
             dataset_id=_unique_dataset_id("register-geo3k"),
             dataset_path=str(data_service_stack["geometry3k_path"]),
             dataset_type="rl",
-            processor_path=str(data_service_stack["vlm_model_path"]),
+            tokenizer_or_processor_path=str(data_service_stack["vlm_model_path"]),
         )
         assert str(payload["api_key"]).startswith("ds-")
         assert payload["dataset_size"] > 0
@@ -503,7 +501,7 @@ class TestFullLifecycle:
         dataset_type: str,
     ):
         dataset_id = _unique_dataset_id(f"full-{dataset_type}")
-        tokenizer_path = (
+        tokenizer_or_processor_path = (
             str(data_service_stack["model_path"]) if dataset_type == "sft" else ""
         )
         reg = _register_dataset(
@@ -511,7 +509,7 @@ class TestFullLifecycle:
             dataset_id=dataset_id,
             dataset_path=str(data_service_stack["dataset_path"]),
             dataset_type=dataset_type,
-            tokenizer_path=tokenizer_path,
+            tokenizer_or_processor_path=tokenizer_or_processor_path,
             batch_size=BATCH_SIZE,
         )
         api_key = str(reg["api_key"])
@@ -587,7 +585,7 @@ class TestFullLifecycle:
             dataset_id=dataset_id,
             dataset_path=str(data_service_stack["geometry3k_path"]),
             dataset_type="rl",
-            processor_path=str(data_service_stack["vlm_model_path"]),
+            tokenizer_or_processor_path=str(data_service_stack["vlm_model_path"]),
             batch_size=BATCH_SIZE,
         )
         api_key = str(reg["api_key"])

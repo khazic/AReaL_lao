@@ -10,11 +10,10 @@ class RegisterDatasetRequest(BaseModel):
     dataset_path: str
     dataset_type: str
     split: str = "train"
-    tokenizer_path: str = ""
-    processor_path: str = ""
+    tokenizer_or_processor_path: str = ""
     batch_size: int = 32
     seed: int = 42
-    max_length: int = 2048
+    max_length: int | None = None
     shuffle: bool = True
     collate_mode: str = "identity"
     experiment_name: str = ""
@@ -68,11 +67,10 @@ class WorkerLoadDatasetRequest(BaseModel):
     dataset_path: str
     dataset_type: str
     split: str = "train"
-    tokenizer_path: str = ""
-    processor_path: str = ""
+    tokenizer_or_processor_path: str = ""
     batch_size: int = 32
     seed: int = 42
-    max_length: int = 2048
+    max_length: int | None = None
     shuffle: bool = True
     collate_mode: str = "identity"
     experiment_name: str = ""
