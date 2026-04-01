@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Intelligent PR code review with dynamic agent allocation based on change types
+description: Intelligent PR code review with dynamic agent allocation based on domains and signals
 allowed-tools: Read, Grep, Glob, Bash, Task
 ---
 
@@ -33,7 +33,7 @@ targeted review tasks based on PR changes.
 Phase 1: Deep PR Analysis [Haiku + Sonnet]
     |- 1.0 PR Status Check [Haiku]
     |- 1.1 Get PR Summary [Haiku]
-    +- 1.2-1.4 Change Type Detection [Sonnet]
++- 1.2-1.4 Domain/Signal Detection [Sonnet]
     |
 Phase 2: Dynamic Agent Planning [Sonnet]
     |
@@ -66,20 +66,20 @@ Check if PR should be reviewed:
 
 Get basic PR info: title, description, modified files, change summary.
 
-### 1.2 Change Type Detection \[Sonnet\]
+### 1.2 Domain & Signal Detection \[Sonnet\]
 
-Analyze each file change, detecting change types by risk level.
+Analyze each file change, detecting L1 domains and L2 signals by risk level.
 
-**Reference**: See `review-pr-change-types.md` for complete detection tables:
+**Reference**: See `review-pr-change-types.md` for complete domain tables:
 
-- CRITICAL level types (Archon, FSDP, Megatron, DCP)
-- HIGH level types (distributed comm, DTensor, MoE, TP/EP/CP)
-- MEDIUM level types (tensor ops, workflow, API, compile)
-- LOW level types (tests, docs, config)
+- L1 domains (Distributed Runtime, Model Compute & Attention, Inference Backend &
+  Serving, etc.)
+- L2 signals per domain
+- cross-domain linkage rules
 
-### 1.3 Framework-Specific Risk Identification
+### 1.3 Domain-Specific Risk Identification
 
-Based on detected types, identify corresponding risks.
+Based on detected domains/signals, identify corresponding risks and linked checks.
 
 **Reference**: See `review-pr-change-types.md` for risk lists per framework.
 
@@ -87,11 +87,12 @@ Based on detected types, identify corresponding risks.
 
 ```
 CHANGE_ANALYSIS_REPORT:
-- detected_types: [ARCHON_PARALLEL, EP_ETP, FSDP_CORE, ...]
+- detected_domains: [Distributed Runtime, Model Compute & Attention, ...]
+- detected_signals: [weight_sync, tree_attn, ...]
 - risk_level: CRITICAL | HIGH | MEDIUM | LOW
 - affected_files: [file1.py, file2.py, ...]
 - identified_risks: [risk1, risk2, ...]
-- related_frameworks: [archon, fsdp, megatron, ...]
+- related_frameworks: [archon, fsdp, megatron, vllm, service-stack, ...]
 ```
 
 ______________________________________________________________________
@@ -107,19 +108,20 @@ ______________________________________________________________________
 
 ### 2.2 Task Template Selection
 
-Based on detected change types, select appropriate review task templates.
+Based on detected domains/signals, select appropriate review task templates.
 
 **Reference**: See `review-pr-templates.md` for complete task templates:
 
-- Framework-specific tasks (Archon, FSDP, Megatron, DCP, Trainer)
-- General tasks (Logic, Concurrency, Tensor, Numerical, TP, etc.)
+- Domain templates (Distributed Runtime, Model Compute & Attention, Inference Backend &
+  Serving, etc.)
+- Universal + signal-specific add-on templates
 
 ### 2.3 Output Review Task List
 
 ```
 GENERATED_REVIEW_TASKS:
 1. [Opus] Task Name
-   - Reason: XXX change type detected
+   - Reason: XXX domain/signal detected
    - Checklist: [...]
    - Focus files: [...]
 

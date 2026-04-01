@@ -1,149 +1,195 @@
-# PR Review: Change Type Detection Reference
+# PR Review: Domain & Signal Detection Reference
 
-This file contains the change type detection tables for PR review. Referenced by:
-`.claude/commands/review-pr.md`
-
-______________________________________________________________________
-
-## CRITICAL Level (Must use Opus)
-
-| Change Type            | File Path Pattern                                                 | Code Pattern                                                |
-| ---------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| **ARCHON_CORE**        | `areal/experimental/models/archon/`                               | -                                                           |
-| **ARCHON_PARALLEL**    | `parallel_dims.py`                                                | `ArchonParallelDims`, `_build_mesh`, `DeviceMesh`           |
-| **ARCHON_MOE**         | `archon/moe/`                                                     | `router`, `grouped_experts`, `TokenReorderer`, `grouped_mm` |
-| **ARCHON_PARALLELIZE** | `qwen*/infra/parallelize.py`                                      | `apply_moe_ep_tp`, `apply_tp`, `apply_cp`                   |
-| **ARCHON_ENGINE**      | `areal/experimental/engine/archon_engine.py`                      | `ArchonEngine`                                              |
-| **FSDP_CORE**          | `areal/engine/fsdp_utils/`, `areal/engine/fsdp_engine.py`         | `FSDP`, `FullyShardedDataParallel`, `fully_shard`           |
-| **MEGATRON_CORE**      | `areal/engine/megatron_engine.py`, `areal/engine/megatron_utils/` | `MegatronEngine`                                            |
-| **DCP_CHECKPOINT**     | -                                                                 | `DCP`, `DistributedCheckpoint`, `dcp.save`, `dcp.load`      |
-
-## HIGH Level (Recommend Opus)
-
-| Change Type           | File Path Pattern | Code Pattern                                                                     |
-| --------------------- | ----------------- | -------------------------------------------------------------------------------- |
-| **DISTRIBUTED_COMM**  | -                 | `all_reduce`, `all_gather`, `reduce_scatter`, `all_to_all`, `dist.`              |
-| **DTENSOR**           | -                 | `DTensor`, `DeviceMesh`, `Shard(`, `Replicate(`, `Partial(`, `distribute_tensor` |
-| **MOE_LAYER**         | `moe/`            | `expert`, `token_dispatch`, `grouped_mm`, `MoE`                                  |
-| **EP_ETP**            | -                 | `ExpertParallel`, `TensorParallel`, `ExpertTensorParallel`, `ep_size`, `etp`     |
-| **TENSOR_PARALLEL**   | -                 | `ColwiseParallel`, `RowwiseParallel`, `parallelize_module`                       |
-| **SEQUENCE_PARALLEL** | -                 | `SequenceParallel`, `context_parallel`, `Ulysses`, `cp_size`                     |
-| **ASYNC_CONCURRENT**  | -                 | `async def`, `await`, `asyncio`, `threading.Lock`, `aiofiles`                    |
-| **TRAINER_CORE**      | `areal/trainer/`  | `PPOTrainer`, `SFTTrainer`, `trainer.train`                                      |
-
-## MEDIUM Level (Use Sonnet)
-
-| Change Type             | File Path Pattern                                                                                                            | Code Pattern                                                             |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **TENSOR_OPS**          | -                                                                                                                            | `.view(`, `.reshape(`, `dtype=`, `.detach()`, `no_grad`, `.contiguous()` |
-| **NUMERICAL**           | -                                                                                                                            | `log(`, `softmax`, `cross_entropy`, `eps=`, `.clamp(`, `nan`, `inf`      |
-| **WORKFLOW_ENGINE**     | `areal/workflow/`, `areal/engine/`                                                                                           | `arun_episode`, `agenerate`, `RolloutWorkflow`                           |
-| **API_CONFIG**          | `areal/api/`                                                                                                                 | `@dataclass`, `__post_init__`, `field(`                                  |
-| **COMPILE**             | -                                                                                                                            | `torch.compile`, `_dynamo`, `mark_dynamic`, `fullgraph`                  |
-| **ACTIVATION_CKPT**     | `activation_checkpoint.py`                                                                                                   | `activation_checkpoint`, `checkpoint_wrapper`, `selective_checkpoint`    |
-| **CHECKPOINT_RECOVERY** | `areal/utils/saver.py`, `areal/utils/recover.py`, `areal/engine/fsdp_utils/checkpoint.py`, `areal/utils/async_checkpoint.py` | `state_dict`, `load_state_dict`, `checkpoint`, `AsyncCheckpointManager`  |
-| **REWARD**              | `areal/reward/`                                                                                                              | `reward_fn`, `AsyncRewardWrapper`, `MathVerifyWorker`                    |
-| **DATASET**             | `areal/dataset/`                                                                                                             | `get_*_dataset`, `DataLoader`, `IterableDataset`                         |
-| **LAUNCHER_SCHEDULER**  | `areal/infra/launcher/`, `areal/infra/scheduler/`, `areal/infra/rpc/`                                                        | `LaunchConfig`, `Scheduler`, `RayLauncher`, `SlurmLauncher`              |
-| **ATTENTION**           | `attention/`, `attention/sdpa.py`, `attention/varlen.py`                                                                     | `flash_attn`, `sdpa`, `varlen`, `causal_mask`                            |
-
-## LOW Level (Use Haiku)
-
-| Change Type     | File Path Pattern            | Code Pattern |
-| --------------- | ---------------------------- | ------------ |
-| **TESTS**       | `tests/`, `*_test.py`        | -            |
-| **DOCS**        | `docs/`, `*.md`              | -            |
-| **CONFIG_ONLY** | `*.yaml`, `*.json`, `*.toml` | -            |
+This file contains the canonical change-domain and signal detection tables for PR
+review. Referenced by: `.claude/commands/review-pr.md`
 
 ______________________________________________________________________
 
-## Framework-Specific Risk Identification
+## Severity Mapping
 
-### Archon Risks (When ARCHON\_\* types detected)
-
-- **Device mesh dimension mismatch**: mesh dimension names don't correspond to placement
-- **EP constraint violation**: `ep_size` must divide `num_experts`, and
-  `dp_shard * cp * (tp if etp==1 else 1) % ep == 0`
-- **ETP configuration error**: `etp` must be 1 or equal to `tp`
-- **Token alignment error**: `grouped_mm` requires token count aligned to 8/16/32
-- **All-to-All split/combine mismatch**: dispatch and combine split configs inconsistent
-- **DTensor/Local tensor conversion missing**: need `.to_local()` or
-  `DTensor.from_local()`
-- **torch.compile dynamic shape marking missing**: missing `mark_dynamic` calls
-- **AC application order error**: must be after TP/CP, before FSDP
-- **Ulysses SP configuration**: CP uses Ulysses implementation, not Ring Attention
-- **dp_shard_mod_ep mesh usage**: MoE experts must use `dp_shard_mod_ep` mesh for FSDP
-
-### FSDP Risks (When FSDP\_\* types detected)
-
-- **Shard/reshard timing error**: premature or delayed sharding operations
-- **EP mesh interaction issue**: should use `dp_shard_mod_ep` not `dp_shard` for MoE
-- **Gradient divide factor calculation**: incorrect relationship with world size
-- **State dict save/load inconsistency**: mixing sharded vs full modes
-- **Optimizer state handling**: aggregation and distribution of sharded state
-- **DCP compatibility**: ensure DCP save/load works with FSDP2
-
-### Megatron Risks (When MEGATRON\_\* types detected)
-
-- **Pipeline stage splitting error**: unbalanced layer distribution
-- **Micro-batch scheduling issues**: pipeline bubble handling
-- **Weight sharding and sync**: tied weights handling
-- **AC interaction**: checkpointing under pipeline parallelism
-
-### DCP/Checkpoint Risks (When DCP_CHECKPOINT or CHECKPOINT_RECOVERY detected)
-
-- **Distributed checkpoint consistency**: all ranks must participate in save/load
-- **State dict key mismatch**: keys must match between save and load
-- **Optimizer state compatibility**: ensure optimizer state is correctly
-  sharded/gathered
-- **Version compatibility**: old checkpoints should load in new code
-- **Storage backend compatibility**: ensure storage backend (filesystem, S3, etc.) is
-  compatible
+- **CRITICAL**: use `deep` category
+- **HIGH**: use `deep` category
+- **MEDIUM**: use `unspecified-high` category
+- **LOW**: use `quick` category
 
 ______________________________________________________________________
 
-## Risk Linkage Rules
+## L1 Domains and L2 Signals
 
-| Detected Change             | Auto-Linked Review                                     |
-| --------------------------- | ------------------------------------------------------ |
-| EP changes                  | FSDP interaction check, dp_shard_mod_ep mesh check     |
-| ETP changes                 | TP + EP combination check, mesh dimension check        |
-| Megatron changes            | Pipeline + AC check                                    |
-| Distributed comm changes    | Process group + sync check                             |
-| SEQUENCE_PARALLEL changes   | TP combination + Attention mask check, Ulysses check   |
-| CHECKPOINT_RECOVERY changes | FSDP state dict check, DCP compatibility check         |
-| DCP_CHECKPOINT changes      | FSDP2 integration check, distributed consistency check |
-| COMPILE changes             | Performance regression + FSDP/TP interaction check     |
-| REWARD changes              | Workflow interaction check, AsyncRewardWrapper check   |
-| LAUNCHER_SCHEDULER changes  | Resource config + parallel strategy match check        |
-| TRAINER_CORE changes        | Engine lifecycle + workflow integration check          |
-| ARCHON_ENGINE changes       | DCP checkpoint + parallel dims check                   |
+## Domain 1: Distributed Runtime (CRITICAL/HIGH)
+
+| L2 Signal       | File Path Pattern                                                                             | Code Pattern                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `process_group` | `areal/engine/fsdp_utils/`, `areal/engine/megatron_utils/`, `areal/experimental/engine/`      | `new_group`, `ProcessGroup`, `dist.get_rank(`                                      |
+| `fsdp_core`     | `areal/engine/fsdp_engine.py`, `areal/engine/fsdp_utils/`                                     | `FSDP`, `fully_shard`, `FullyShardedDataParallel`                                  |
+| `megatron_core` | `areal/engine/megatron_engine.py`, `areal/engine/megatron_utils/`                             | `MegatronEngine`, `pipeline`, `micro-batch`                                        |
+| `collectives`   | `areal/engine/`, `areal/infra/rpc/`                                                           | `all_reduce`, `all_gather`, `reduce_scatter`, `all_to_all`, `broadcast`, `barrier` |
+| `mesh_dtensor`  | `areal/experimental/models/archon/`, `areal/engine/fsdp_utils/`                               | `DeviceMesh`, `DTensor`, `Shard(`, `Replicate(`, `distribute_tensor`               |
+| `weight_sync`   | `areal/experimental/engine/archon_weight_sync.py`, `areal/api/engine_api.py`, `areal/engine/` | `WeightUpdateMeta`, `set_version`, `update_weights`                                |
+
+## Domain 2: Model Compute & Attention (HIGH/MEDIUM)
+
+| L2 Signal              | File Path Pattern                                                        | Code Pattern                                     |
+| ---------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ |
+| `tree_attn`            | `areal/models/tree_attn/`                                                | `TreeAttention`, `tree_attn`, `TreeNode`, `tree` |
+| `sdpa_varlen`          | `attention/sdpa.py`, `attention/varlen.py`, `areal/models/tree_attn/`    | `sdpa`, `flash_attn`, `varlen`, `causal_mask`    |
+| `sp_cp_attention_mask` | `areal/models/tree_attn/`, `areal/experimental/models/archon/attention/` | `SequenceParallel`, `context_parallel`, `mask`   |
+| `triton_kernel`        | `areal/models/tree_attn/triton_kernel.py`                                | `triton`, `kernel`, `autotune`                   |
+
+## Domain 3: Inference Backend & Serving (HIGH)
+
+| L2 Signal           | File Path Pattern                        | Code Pattern                                                     |
+| ------------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| `vllm_ext`          | `areal/engine/vllm_ext/`                 | `areal_vllm_server`, `vllm_worker_extension`, `pause_generation` |
+| `vllm_remote`       | `areal/engine/vllm_remote.py`            | `vllm`, `OpenAI`, `request`                                      |
+| `sglang_remote`     | `areal/engine/sglang_remote.py`          | `sglang`, `request`, `response`                                  |
+| `request_lifecycle` | `areal/engine/`, `areal/infra/launcher/` | `enqueue`, `dequeue`, `cancel`, `timeout`                        |
+
+## Domain 4: Service Orchestration (HIGH)
+
+| L2 Signal                     | File Path Pattern                                                                                      | Code Pattern                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `agent_service_routing`       | `areal/experimental/agent_service/gateway/`, `areal/experimental/agent_service/router/`                | `route`, `gateway`, `router`              |
+| `inference_service_dataproxy` | `areal/experimental/inference_service/data_proxy/`, `areal/experimental/inference_service/controller/` | `DataProxy`, `controller`, `batch`        |
+| `session_consistency`         | `areal/experimental/agent_service/`, `areal/experimental/inference_service/`                           | `session`, `affinity`, `history`, `state` |
+
+## Domain 5: Workflow & Trainer Contract (HIGH/MEDIUM)
+
+| L2 Signal                  | File Path Pattern                                                                               | Code Pattern                                        |
+| -------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `workflow_engine_boundary` | `areal/workflow/`, `areal/trainer/`, `areal/engine/`                                            | `RolloutWorkflow`, `arun_episode`, `agenerate`      |
+| `dataset_surface`          | `areal/dataset/`                                                                                | `DataLoader`, `IterableDataset`, `get_*_dataset`    |
+| `async_contract`           | `areal/workflow/`, `areal/experimental/agent_service/`, `areal/experimental/inference_service/` | `async def`, `await`, `aiofiles`, `asyncio`         |
+| `weight_version_contract`  | `areal/api/engine_api.py`, `areal/workflow/`, `areal/trainer/`                                  | `WeightUpdateMeta`, `set_version`, `weight version` |
+
+## Domain 6: API & Config Compatibility (MEDIUM)
+
+| L2 Signal          | File Path Pattern                     | Code Pattern                            |
+| ------------------ | ------------------------------------- | --------------------------------------- |
+| `dataclass_schema` | `areal/api/`                          | `@dataclass`, `field(`, `__post_init__` |
+| `cli_compat`       | `areal/api/cli_args.py`               | `Literal`, `help`, `default`            |
+| `backward_compat`  | `areal/api/`, `areal/infra/launcher/` | `deprecated`, `compat`, `version`       |
+
+## Domain 7: Numerics & Tensor Semantics (MEDIUM)
+
+| L2 Signal             | File Path Pattern                                                       | Code Pattern                                          |
+| --------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| `shape_dtype`         | `areal/engine/`, `areal/models/`, `areal/trainer/`                      | `.view(`, `.reshape(`, `dtype=`, `.contiguous(`       |
+| `numerical_stability` | `areal/engine/`, `areal/reward/`, `areal/utils/functional/`             | `log(`, `softmax`, `eps=`, `.clamp(`, `nan`, `inf`    |
+| `reward_surface`      | `areal/reward/`                                                         | `reward_fn`, `AsyncRewardWrapper`, `MathVerifyWorker` |
+| `mixed_precision_fp8` | `areal/engine/megatron_utils/fp8/`, `areal/experimental/models/archon/` | `fp8`, `bf16`, `fp16`, `mixed precision`              |
+
+## Domain 8: Checkpoint & Recovery (CRITICAL/HIGH)
+
+| L2 Signal         | File Path Pattern                                                   | Code Pattern                                    |
+| ----------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
+| `dcp_consistency` | `areal/utils/async_checkpoint.py`, `areal/engine/**/checkpoint*.py` | `dcp.save`, `dcp.load`, `DistributedCheckpoint` |
+| `optimizer_state` | `areal/engine/fsdp_utils/checkpoint.py`, `areal/utils/saver.py`     | `optimizer state`, `state_dict`                 |
+| `resume_compat`   | `areal/utils/recover.py`, `areal/utils/saver.py`                    | `resume`, `load_state_dict`, `migration`        |
+
+## Domain 9: Launcher & Infrastructure (HIGH/MEDIUM)
+
+| L2 Signal                 | File Path Pattern                                                      | Code Pattern                                   |
+| ------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------- |
+| `launcher_resource_match` | `areal/infra/launcher/`                                                | `LaunchConfig`, `RayLauncher`, `SlurmLauncher` |
+| `scheduler_contract`      | `areal/infra/scheduler/`, `areal/scheduler/`                           | `Scheduler`, `placement`, `resource`           |
+| `rpc_transport`           | `areal/infra/rpc/`, `areal/experimental/inference_service/data_proxy/` | `RTensor`, `serialize`, `rpc`, `fetch`         |
+
+## Domain 10: Low-Risk Hygiene (LOW)
+
+| L2 Signal                 | File Path Pattern                                       | Code Pattern                                                      |
+| ------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `tests_docs_config`       | `tests/`, `docs/`, `*.md`, `*.yaml`, `*.json`, `*.toml` | -                                                                 |
+| `logging_import_security` | `areal/`, `examples/`                                   | `getLogger`, `print(`, `import *`, `api_key`, `token`, `password` |
 
 ______________________________________________________________________
 
-## Core Framework Paths (Must Use Opus)
+## Must-Not-Regress Core Coverage
 
-**Archon Core**:
+The refactor must preserve these existing review surfaces:
 
-- `areal/experimental/models/archon/` (entire directory)
-- `areal/experimental/engine/archon_engine.py`
-- `areal/experimental/engine/archon_checkpoint.py`
+- Archon core: `areal/experimental/models/archon/`,
+  `areal/experimental/engine/archon_engine.py`
+- FSDP core: `areal/engine/fsdp_utils/`, `areal/engine/fsdp_engine.py`
+- Megatron core: `areal/engine/megatron_engine.py`, `areal/engine/megatron_utils/`
+- Reward: `areal/reward/`
+- Dataset: `areal/dataset/`
 
-**FSDP Core**:
+______________________________________________________________________
 
-- `areal/engine/fsdp_utils/`
-- `areal/engine/fsdp_engine.py`
+## Cross-Domain Linkage Rules
 
-**Megatron Core**:
+| Detected Signal                                          | Auto-Linked Review                                  |
+| -------------------------------------------------------- | --------------------------------------------------- |
+| `tree_attn`                                              | Numerics & Tensor Semantics checks                  |
+| `vllm_ext`                                               | Launcher & Infrastructure checks                    |
+| `agent_service_routing` or `inference_service_dataproxy` | Workflow & Trainer async-contract checks            |
+| `weight_sync`                                            | DTensor/process-group/checkpoint interaction checks |
+| `rpc_transport`                                          | Distributed Runtime synchronization checks          |
+| `mixed_precision_fp8` + Distributed Runtime              | mesh + weight-sync compatibility checks             |
 
-- `areal/engine/megatron_engine.py`
-- `areal/engine/megatron_utils/megatron.py`
-- `areal/engine/megatron_utils/checkpointer.py`
+______________________________________________________________________
 
-**Trainer Core**:
+## Risk Identification Guidance
 
-- `areal/trainer/`
+### Distributed Runtime Risks
 
-**Training Engine Core** (excludes FSDP/Megatron which have their own categories):
+- Collective call order mismatch across ranks
+- Wrong process-group scope in rank-sensitive logic
+- Mesh dimension mismatch and invalid DTensor placement
+- Weight version drift between rollout and training workers
 
-- `areal/engine/` (except `fsdp_engine.py`, `megatron_engine.py`)
+### Model Compute & Attention Risks
+
+- Attention mask inconsistency under TP/SP/CP paths
+- Tree attention index/routing mismatch
+- Kernel assumptions violating dtype/shape invariants
+- Sequence packing alignment errors
+
+### Service Orchestration Risks
+
+- Session affinity or history drift across gateway/router/data proxy
+- Async message handling holes and dropped tasks
+- Controller/worker lifecycle desynchronization
+
+### Inference Backend & Serving Risks
+
+- Request lifecycle inconsistencies (enqueue/cancel/timeout)
+- Worker state transitions leaving requests stranded
+- Backend extension hooks drifting from runtime expectations
+
+### Workflow & Trainer Contract Risks
+
+- Workflow-engine contract drift across async boundaries
+- Weight version handshake mismatch between rollout and train
+- Trainer lifecycle transition inconsistencies
+
+### API & Config Compatibility Risks
+
+- Breaking config/schema changes without migration path
+- Dataclass or CLI default changes altering behavior silently
+- Missing validation for newly introduced fields
+
+### Numerics & Tensor Semantics Risks
+
+- Silent shape/dtype mismatch under distributed paths
+- Unstable numerical operations in loss/reward logic
+- Mixed-precision interaction regressions
+
+### Checkpoint & Recovery Risks
+
+- Partial-rank checkpoint participation
+- Incompatible state key evolution
+- Resume path breaking optimizer/model synchronization
+
+### Launcher & Infrastructure Risks
+
+- Resource assignment mismatching parallel strategy assumptions
+- RPC transport metadata loss (shape/dtype/device)
+- Startup/shutdown ordering races across processes
+
+### Low-Risk Hygiene Risks
+
+- Docs/config drift from actual runtime behavior
+- Logging or import hygiene regressions
+- Sensitive data exposure in logs or config
