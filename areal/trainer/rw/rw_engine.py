@@ -58,7 +58,9 @@ class RWController(TrainController):
         self._custom_function_call("train_rw", *args, **kwargs)
 
     def evaluate_rw(self, *args, **kwargs):
-        self._custom_function_call("evaluate_rw", *args, **kwargs)
+        # rw_modeling_collate_fn produces 2 sequences (chosen + rejected) per item,
+        # so eval padding must insert multiples of 2 to keep pairs aligned.
+        self._custom_function_call("evaluate_rw", *args, granularity=2, **kwargs)
 
 
 def compute_rw_loss(scores: torch.Tensor, input_: dict[str, Any]) -> torch.Tensor:

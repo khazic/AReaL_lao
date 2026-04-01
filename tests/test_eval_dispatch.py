@@ -107,6 +107,38 @@ def test_make_dummy_eval_item_schema():
     assert dummy["meta"] == {"tag": ["x"]}
 
 
+def test_pad_eval_batch_granularity_odd_dp():
+    items = [_make_item(i) for i in range(2)]
+    (padded,) = _pad_eval_batch((items,), dp_size=3, granularity=2)
+    assert len(padded) == 6
+    assert len(padded) % 2 == 0
+    assert len(padded) % 3 == 0
+    assert _count_dummies(padded) == 4
+
+
+def test_pad_eval_batch_granularity_even_dp():
+    items = [_make_item(i) for i in range(6)]
+    (padded,) = _pad_eval_batch((items,), dp_size=4, granularity=2)
+    assert len(padded) == 8
+    assert len(padded) % 2 == 0
+    assert len(padded) % 4 == 0
+    assert _count_dummies(padded) == 2
+
+
+def test_pad_eval_batch_granularity_no_pad_needed():
+    items = [_make_item(i) for i in range(6)]
+    (padded,) = _pad_eval_batch((items,), dp_size=3, granularity=2)
+    assert len(padded) == 6
+    assert _count_dummies(padded) == 0
+
+
+def test_pad_eval_batch_default_granularity_unchanged():
+    items = [_make_item(i) for i in range(7)]
+    (padded,) = _pad_eval_batch((items,), dp_size=4)
+    assert len(padded) == 8
+    assert _count_dummies(padded) == 1
+
+
 def test_compute_total_loss_weight_allows_local_zero(monkeypatch: pytest.MonkeyPatch):
     mb_list = MicroBatchList(
         data={},

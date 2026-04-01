@@ -1,4 +1,5 @@
 import asyncio
+from math import lcm
 from typing import Any
 
 import torch
@@ -84,19 +85,26 @@ def _dispatch_tensors(
     return splits, group_indices
 
 
-def _pad_eval_batch(args: tuple[Any, ...], dp_size: int) -> tuple[Any, ...]:
+def _pad_eval_batch(
+    args: tuple[Any, ...], dp_size: int, granularity: int = 1
+) -> tuple[Any, ...]:
     """Pad the first tensor-like arg to a multiple of dp_size with dummy items.
 
     Called before dispatch for ``evaluate_*`` methods so that
     ``balanced_greedy_partition`` always receives a divisible input.
     Dummy items have zero attention/loss masks and contribute nothing
     to metrics or loss.
+
+    Args:
+        granularity: pad to ``lcm(dp_size, granularity)`` so that
+            downstream invariants (e.g. RW paired-sequence) are preserved.
     """
     result = list(args)
+    pad_target = lcm(dp_size, granularity)
     for i, arg in enumerate(result):
         if isinstance(arg, list) and arg and _is_tensor_like(arg):
             n = len(arg)
-            pad_count = (-n) % dp_size
+            pad_count = (-n) % pad_target
             if pad_count > 0:
                 padded = list(arg)
                 template = arg[0]
@@ -406,7 +414,10 @@ class TrainController:
     def _custom_function_call(self, method: str, *args, **kwargs):
         """Dispatch method call to workers via the appropriate path."""
         if method.startswith("evaluate_"):
-            args = _pad_eval_batch(args, self.parallel_strategy.dp_size)
+            granularity = kwargs.pop("granularity", 1)
+            args = _pad_eval_batch(
+                args, self.parallel_strategy.dp_size, granularity=granularity
+            )
         dp_args, dp_kwargs, group_indices = self._prepare_dispatch(*args, **kwargs)
         results = run_async_task(self._call_workers, method, dp_args, dp_kwargs)
         return self._collect_results(results, group_indices)
@@ -414,7 +425,10 @@ class TrainController:
     async def _async_custom_function_call(self, method: str, *args, **kwargs):
         """Async version of _custom_function_call."""
         if method.startswith("evaluate_"):
-            args = _pad_eval_batch(args, self.parallel_strategy.dp_size)
+            granularity = kwargs.pop("granularity", 1)
+            args = _pad_eval_batch(
+                args, self.parallel_strategy.dp_size, granularity=granularity
+            )
         dp_args, dp_kwargs, group_indices = self._prepare_dispatch(*args, **kwargs)
         results = await self._call_workers(method, dp_args, dp_kwargs)
         return self._collect_results(results, group_indices)
