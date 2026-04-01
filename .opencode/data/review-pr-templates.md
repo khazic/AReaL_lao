@@ -30,7 +30,7 @@ Checklist:
 
 ______________________________________________________________________
 
-## Domain 1 Template: Distributed Runtime Review \[deep\]
+## Domain 1 Template: Distributed Runtime Review \[comprehensive\]
 
 ```
 Applicable signals: process_group, collectives, mesh_dtensor, weight_sync
@@ -43,7 +43,7 @@ Checklist:
 - No debug-only barriers left in hot path
 ```
 
-## Domain 2 Template: Model Compute & Attention Review \[deep\]
+## Domain 2 Template: Model Compute & Attention Review \[comprehensive\]
 
 ```
 Applicable signals: tree_attn, sdpa_varlen, sp_cp_attention_mask, triton_kernel
@@ -55,7 +55,7 @@ Checklist:
 - Tensor layouts remain compatible with downstream modules
 ```
 
-## Domain 3 Template: Inference Backend & Serving Review \[deep\]
+## Domain 3 Template: Inference Backend & Serving Review \[comprehensive\]
 
 ```
 Applicable signals: vllm_ext, vllm_remote, sglang_remote, request_lifecycle
@@ -67,7 +67,7 @@ Checklist:
 - Versioning/weight-update interactions are explicit and safe
 ```
 
-## Domain 4 Template: Service Orchestration Review \[deep\]
+## Domain 4 Template: Service Orchestration Review \[comprehensive\]
 
 ```
 Applicable signals: agent_service_routing, inference_service_dataproxy, session_consistency
@@ -79,7 +79,7 @@ Checklist:
 - Failure/retry behavior does not duplicate or drop work
 ```
 
-## Domain 5 Template: Workflow & Trainer Contract Review \[deep\]
+## Domain 5 Template: Workflow & Trainer Contract Review \[comprehensive\]
 
 ```
 Applicable signals: workflow_engine_boundary, async_contract, weight_version_contract
@@ -91,7 +91,7 @@ Checklist:
 - Call ordering assumptions across trainer/workflow/engine are unchanged or justified
 ```
 
-## Domain 6 Template: API & Config Compatibility Review \[unspecified-high\]
+## Domain 6 Template: API & Config Compatibility Review \[targeted\]
 
 ```
 Applicable signals: dataclass_schema, cli_compat, backward_compat
@@ -103,7 +103,7 @@ Checklist:
 - Breaking changes are documented and scoped
 ```
 
-## Domain 7 Template: Numerics & Tensor Semantics Review \[unspecified-high\]
+## Domain 7 Template: Numerics & Tensor Semantics Review \[targeted\]
 
 ```
 Applicable signals: shape_dtype, numerical_stability, mixed_precision_fp8
@@ -115,7 +115,7 @@ Checklist:
 - Device placement and dtype combinations remain legal across code paths
 ```
 
-## Domain 8 Template: Checkpoint & Recovery Review \[deep\]
+## Domain 8 Template: Checkpoint & Recovery Review \[comprehensive\]
 
 ```
 Applicable signals: dcp_consistency, optimizer_state, resume_compat
@@ -127,7 +127,7 @@ Checklist:
 - Async checkpoint behavior preserves ordering and durability assumptions
 ```
 
-## Domain 9 Template: Launcher & Infrastructure Review \[unspecified-high\]
+## Domain 9 Template: Launcher & Infrastructure Review \[targeted\]
 
 ```
 Applicable signals: launcher_resource_match, scheduler_contract, rpc_transport
@@ -139,7 +139,7 @@ Checklist:
 - Cross-process startup/shutdown ordering is robust
 ```
 
-## Domain 10 Template: Low-Risk Hygiene Review \[quick\]
+## Domain 10 Template: Low-Risk Hygiene Review \[basic\]
 
 ```
 Applicable signals: tests_docs_config, logging_import_security
@@ -156,7 +156,7 @@ ______________________________________________________________________
 
 Use these only when corresponding L2 signals are detected.
 
-### `tree_attn` Add-On \[deep\]
+### `tree_attn` Add-On \[comprehensive\]
 
 ```
 - Node/edge indexing is deterministic and shape-safe
@@ -164,7 +164,7 @@ Use these only when corresponding L2 signals are detected.
 - FSDP/Megatron/Archon variant modules remain behaviorally aligned
 ```
 
-### `vllm_ext` Add-On \[deep\]
+### `vllm_ext` Add-On \[comprehensive\]
 
 ```
 - Server and worker extension hooks still match upstream expectations
@@ -172,7 +172,7 @@ Use these only when corresponding L2 signals are detected.
 - Integration-specific monkey-patches are scoped and guarded
 ```
 
-### `agent_service_routing` / `inference_service_dataproxy` Add-On \[deep\]
+### `agent_service_routing` / `inference_service_dataproxy` Add-On \[comprehensive\]
 
 ```
 - Route selection and fallback ordering are deterministic
@@ -180,7 +180,7 @@ Use these only when corresponding L2 signals are detected.
 - Session-key partitioning logic is collision-safe
 ```
 
-### `weight_sync` Add-On \[deep\]
+### `weight_sync` Add-On \[comprehensive\]
 
 ```
 - Versioned updates are monotonic and race-safe
@@ -188,7 +188,7 @@ Use these only when corresponding L2 signals are detected.
 - Local caching behavior cannot serve stale weights indefinitely
 ```
 
-### `rpc_transport` Add-On \[unspecified-high\]
+### `rpc_transport` Add-On \[targeted\]
 
 ```
 - RTensor conversion is reversible and metadata-complete

@@ -5,12 +5,12 @@ review. Referenced by: `.agents/skills/review-pr/SKILL.md`
 
 ______________________________________________________________________
 
-## Severity Mapping
+## Severity-to-Review-Depth Mapping
 
-- **CRITICAL**: use `deep` category
-- **HIGH**: use `deep` category
-- **MEDIUM**: use `unspecified-high` category
-- **LOW**: use `quick` category
+- **CRITICAL**: use `comprehensive` review depth
+- **HIGH**: use `comprehensive` review depth
+- **MEDIUM**: use `targeted` review depth
+- **LOW**: use `basic` review depth
 
 ______________________________________________________________________
 

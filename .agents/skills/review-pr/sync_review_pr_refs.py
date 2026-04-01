@@ -45,31 +45,7 @@ def transform_for_opencode(text: str) -> str:
 
 
 def transform_for_claude(text: str) -> str:
-    replacements = [
-        (
-            "## Core Framework Paths (Requires `deep` category)",
-            "## Core Framework Paths (Must Use Opus)",
-        ),
-        ("\\[deep / unspecified-high\\]", "\\[Opus/Sonnet\\]"),
-        ("\\[deep\\]", "\\[Opus\\]"),
-        ("\\[unspecified-high\\]", "\\[Sonnet\\]"),
-        ("\\[quick\\]", "\\[Haiku\\]"),
-        ("[deep / unspecified-high]", "[Opus/Sonnet]"),
-        ("[deep]", "[Opus]"),
-        ("[unspecified-high]", "[Sonnet]"),
-        ("[quick]", "[Haiku]"),
-        ("(Requires `deep` category)", "(Must use Opus)"),
-        ("(Recommend `deep` category)", "(Recommend Opus)"),
-        ("(Use `unspecified-high` category)", "(Use Sonnet)"),
-        ("(Use `quick` category)", "(Use Haiku)"),
-        ("(Requires 'deep' category)", "(Must use Opus)"),
-        ("(Recommend 'deep' category)", "(Recommend Opus)"),
-        ("(Use 'unspecified-high' category)", "(Use Sonnet)"),
-        ("(Use 'quick' category)", "(Use Haiku)"),
-    ]
     out = text
-    for old, new in replacements:
-        out = out.replace(old, new)
     out = out.replace(
         "`.agents/skills/review-pr/SKILL.md`", "`.claude/commands/review-pr.md`"
     )

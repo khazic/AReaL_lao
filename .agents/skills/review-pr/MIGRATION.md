@@ -205,18 +205,11 @@ Generated/derived files:
 "Mechanical sync" means deterministic conversion, not manual copy/paste:
 
 1. Read canonical `.agents` files.
-1. Emit OpenCode copies with category labels (`deep`, `unspecified-high`, `quick`) and
-   preserve OpenCode-specific policy extensions (e.g. CRITICAL dual-fire with
-   `ultrabrain`).
-1. Emit Claude copies with model labels (`Opus`, `Sonnet`, `Haiku`) and preserve Claude
-   wrapper options (e.g. `--economy`).
+1. Emit OpenCode and Claude data copies with the same generic review-depth vocabulary
+   (`comprehensive`, `targeted`, `basic`).
+1. Keep all runtime routing and platform execution choices in the wrapper command files
+   only.
 1. Preserve section order and checklist content exactly.
-
-Suggested mapping:
-
-- `deep` -> `Opus`
-- `unspecified-high` -> `Sonnet`
-- `quick` -> `Haiku`
 
 ______________________________________________________________________
 

@@ -103,7 +103,9 @@ ______________________________________________________________________
 
 1. **Generate tasks by risk area**: Each high-risk area gets a dedicated task
 1. **Merge related changes**: Interdependent changes can be merged
-1. **Model selection**: CRITICAL/HIGH -> Opus, MEDIUM -> Sonnet, LOW -> Haiku
+1. **Review depth selection**: CRITICAL/HIGH -> `comprehensive`, MEDIUM -> `targeted`,
+   LOW -> `basic`
+1. **Model routing**: `comprehensive` -> Opus, `targeted` -> Sonnet, `basic` -> Haiku
 1. **Minimum coverage**: Even simple changes get at least 1 basic review task
 
 ### 2.2 Task Template Selection
@@ -120,12 +122,12 @@ Based on detected domains/signals, select appropriate review task templates.
 
 ```
 GENERATED_REVIEW_TASKS:
-1. [Opus] Task Name
+1. [comprehensive -> Opus] Task Name
    - Reason: XXX domain/signal detected
    - Checklist: [...]
    - Focus files: [...]
 
-2. [Sonnet] Task Name
+2. [targeted -> Sonnet] Task Name
    - Reason: ...
    ...
 ```
@@ -157,13 +159,13 @@ findings:
     suggestion: "Fix suggestion"
 ```
 
-### 3.3 Review Depth by Model
+### 3.3 Review Depth Mapping
 
-| Model      | Requirements                                                               |
-| ---------- | -------------------------------------------------------------------------- |
-| **Opus**   | Complete context, cross-file traces, verify parallel strategy interactions |
-| **Sonnet** | Changed code + direct callers/callees, type signature consistency          |
-| **Haiku**  | Format and basic correctness only                                          |
+| Review Depth      | Model  | Requirements                                                               |
+| ----------------- | ------ | -------------------------------------------------------------------------- |
+| **comprehensive** | Opus   | Complete context, cross-file traces, verify parallel strategy interactions |
+| **targeted**      | Sonnet | Changed code + direct callers/callees, type signature consistency          |
+| **basic**         | Haiku  | Format and basic correctness only                                          |
 
 ______________________________________________________________________
 
@@ -186,7 +188,8 @@ ______________________________________________________________________
 
 ## PR Overview
 - **Title**: PR title
-- **Detected Change Types**: [...]
+- **Detected Domains**: [...]
+- **Detected Signals**: [...]
 - **Risk Level**: CRITICAL | HIGH | MEDIUM | LOW
 - **Generated Review Tasks**: N
 
@@ -227,13 +230,13 @@ ______________________________________________________________________
 
 ## Dynamic Generation Examples
 
-| PR Type        | Detected Types                        | Generated Tasks |
-| -------------- | ------------------------------------- | --------------- |
-| Docs only      | \[DOCS\]                              | 1 Haiku         |
-| Config only    | \[CONFIG_ONLY\]                       | 1-2 Haiku       |
-| Single bug fix | \[TENSOR_OPS\]                        | 2-4 Sonnet      |
-| Archon core    | \[ARCHON\_\*, EP_ETP, DTENSOR\]       | 4-8 Opus        |
-| Cross-domain   | \[WORKFLOW_ENGINE, FSDP_CORE, TESTS\] | 5-10 mixed      |
+| PR Type        | Detected Domains/Signals                            | Generated Tasks                 |
+| -------------- | --------------------------------------------------- | ------------------------------- |
+| Docs only      | \[Low-Risk Hygiene / tests_docs_config\]            | 1 basic -> Haiku                |
+| Config only    | \[API & Config Compatibility / dataclass_schema\]   | 1-2 basic/targeted              |
+| Single bug fix | \[Numerics & Tensor Semantics / shape_dtype\]       | 2-4 targeted -> Sonnet          |
+| Archon core    | \[Distributed Runtime / mesh_dtensor, weight_sync\] | 4-8 comprehensive -> Opus       |
+| Cross-domain   | \[Workflow & Trainer + Distributed + Hygiene\]      | 5-10 mixed review depths/models |
 
 ______________________________________________________________________
 
@@ -275,15 +278,13 @@ Related files:
 
 ## How to Update
 
-### Adding New Change Types
-Edit .claude/data/review-pr-change-types.md:
-1. Add to appropriate level table (CRITICAL/HIGH/MEDIUM/LOW)
-2. Add framework risks if applicable
+### Adding New Domains or Signals
+Edit `.agents/skills/review-pr/references/review-pr-change-types.md`, then regenerate
+the derived data files with `python3 .agents/skills/review-pr/sync_review_pr_refs.py --write`.
 
 ### Adding New Task Templates
-Edit .claude/data/review-pr-templates.md:
-1. Add to framework-specific or general section
-2. Include checklist
+Edit `.agents/skills/review-pr/references/review-pr-templates.md`, then regenerate the
+derived data files with `python3 .agents/skills/review-pr/sync_review_pr_refs.py --write`.
 
 ### Adjusting Model Selection
 Modify "Model Configuration" table in this file.

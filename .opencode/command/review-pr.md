@@ -69,7 +69,15 @@ OpenCode uses `task()` with categories for delegating review work.
 **If `--quick` is set**: stop after Phase 1 and output `CHANGE_ANALYSIS_REPORT` only (do
 NOT delegate review tasks).
 
-Otherwise, map risk levels to categories:
+Otherwise, map canonical review depths to OpenCode categories:
+
+| Review Depth    | OpenCode Routing                                             |
+| --------------- | ------------------------------------------------------------ |
+| `comprehensive` | `deep` (and add `ultrabrain` in parallel for CRITICAL cases) |
+| `targeted`      | `unspecified-high`                                           |
+| `basic`         | `quick`                                                      |
+
+Then map risk levels to review depths and categories:
 
 | Risk Level   | Category                                                                                       |
 | ------------ | ---------------------------------------------------------------------------------------------- |
@@ -161,8 +169,10 @@ ______________________________________________________________________
 
 1. **Generate tasks by risk area**: Each high-risk area gets a dedicated task
 1. **Merge related changes**: Interdependent changes can be merged
-1. **Category selection**: CRITICAL/HIGH -> `deep`, MEDIUM -> `unspecified-high`, LOW ->
-   `quick`
+1. **Review depth selection**: CRITICAL/HIGH -> `comprehensive`, MEDIUM -> `targeted`,
+   LOW -> `basic`
+1. **Category routing**: `comprehensive` -> `deep`, `targeted` -> `unspecified-high`,
+   `basic` -> `quick`
 1. **Minimum coverage**: Even simple changes get at least 1 basic review task
 1. **Skill loading**: Include relevant skills for framework-specific reviews (e.g.,
    `add-archon-model` for Archon changes, `debug-distributed` for distributed code)
@@ -183,14 +193,14 @@ Based on detected domains/signals, select appropriate review task templates.
 
 ```
 GENERATED_REVIEW_TASKS:
-1. [deep] Task Name
+1. [comprehensive -> deep] Task Name
    - Reason: XXX domain/signal detected
-   - Skills: [skill1, skill2]  // or [] if none
-   - Expert: archon-expert     // or none
-   - Checklist: [...]
-   - Focus files: [...]
+    - Skills: [skill1, skill2]  // or [] if none
+    - Expert: archon-expert     // or none
+    - Checklist: [...]
+    - Focus files: [...]
 
-2. [unspecified-high] Task Name
+2. [targeted -> unspecified-high] Task Name
    - Reason: ...
    - Skills: []
    ...
@@ -210,7 +220,7 @@ ______________________________________________________________________
 
 ### 3.2 Delegation Template
 
-For each review task from Phase 2, delegate as:
+For each review task from Phase 2, first map review depth to category, then delegate as:
 
 ```
 task(
@@ -253,13 +263,13 @@ task(
 )
 ```
 
-### 3.3 Review Depth by Category
+### 3.3 Review Depth Mapping
 
-| Category             | Requirements                                                               |
-| -------------------- | -------------------------------------------------------------------------- |
-| **deep**             | Complete context, cross-file traces, verify parallel strategy interactions |
-| **unspecified-high** | Changed code + direct callers/callees, type signature consistency          |
-| **quick**            | Format and basic correctness only                                          |
+| Review Depth      | Category           | Requirements                                                               |
+| ----------------- | ------------------ | -------------------------------------------------------------------------- |
+| **comprehensive** | `deep`             | Complete context, cross-file traces, verify parallel strategy interactions |
+| **targeted**      | `unspecified-high` | Changed code + direct callers/callees, type signature consistency          |
+| **basic**         | `quick`            | Format and basic correctness only                                          |
 
 ______________________________________________________________________
 
@@ -282,7 +292,8 @@ ______________________________________________________________________
 
 ## PR Overview
 - **Title**: PR title
-- **Detected Change Types**: [...]
+- **Detected Domains**: [...]
+- **Detected Signals**: [...]
 - **Risk Level**: CRITICAL | HIGH | MEDIUM | LOW
 - **Generated Review Tasks**: N
 
@@ -323,13 +334,13 @@ ______________________________________________________________________
 
 ## Dynamic Generation Examples
 
-| PR Type        | Detected Types                        | Generated Tasks             |
-| -------------- | ------------------------------------- | --------------------------- |
-| Docs only      | \[DOCS\]                              | 1 quick                     |
-| Config only    | \[CONFIG_ONLY\]                       | 1-2 quick                   |
-| Single bug fix | \[TENSOR_OPS\]                        | 2-4 unspecified-high        |
-| Archon core    | \[ARCHON\_\*, EP_ETP, DTENSOR\]       | 4-8 deep + expert subagents |
-| Cross-domain   | \[WORKFLOW_ENGINE, FSDP_CORE, TESTS\] | 5-10 mixed categories       |
+| PR Type        | Detected Domains/Signals                            | Generated Tasks                              |
+| -------------- | --------------------------------------------------- | -------------------------------------------- |
+| Docs only      | \[Low-Risk Hygiene / tests_docs_config\]            | 1 basic -> quick                             |
+| Config only    | \[API & Config Compatibility / dataclass_schema\]   | 1-2 targeted/basic                           |
+| Single bug fix | \[Numerics & Tensor Semantics / shape_dtype\]       | 2-4 targeted                                 |
+| Archon core    | \[Distributed Runtime / mesh_dtensor, weight_sync\] | 4-8 comprehensive -> deep + expert subagents |
+| Cross-domain   | \[Workflow & Trainer + Distributed + Hygiene\]      | 5-10 mixed review depths and categories      |
 
 ______________________________________________________________________
 
@@ -366,7 +377,7 @@ Related files:
 
 ## Differences from Claude Code version
 
-1. Model names (Opus/Sonnet/Haiku) -> task() categories (deep/unspecified-high/quick)
+1. Claude model routing -> OpenCode task() categories via generic review depths
 2. @import syntax removed -> uses @ file references for auto-inclusion
 3. allowed-tools frontmatter removed
 4. Added subtask: true to run as subtask (not pollute main context)
@@ -377,17 +388,13 @@ Related files:
 
 ## How to Update
 
-### Adding New Change Types
-Edit .opencode/data/review-pr-change-types.md:
-1. Add to appropriate level table (CRITICAL/HIGH/MEDIUM/LOW)
-2. Add framework risks if applicable
-3. Also update .claude/data/review-pr-change-types.md to keep in sync
+### Adding New Domains or Signals
+Edit `.agents/skills/review-pr/references/review-pr-change-types.md`, then regenerate
+the derived data files with `python3 .agents/skills/review-pr/sync_review_pr_refs.py --write`.
 
 ### Adding New Task Templates
-Edit .opencode/data/review-pr-templates.md:
-1. Add to framework-specific or general section
-2. Include checklist and category assignment
-3. Also update .claude/data/review-pr-templates.md to keep in sync
+Edit `.agents/skills/review-pr/references/review-pr-templates.md`, then regenerate the
+derived data files with `python3 .agents/skills/review-pr/sync_review_pr_refs.py --write`.
 
 ### Adjusting Category Selection
 Modify "Delegation Strategy" table in this file.
